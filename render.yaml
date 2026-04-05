@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: oddlot-backend
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    rootDir: backend
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: UPSTASH_REDIS_URL
+        sync: false
+      - key: UPSTASH_REDIS_TOKEN
+        sync: false
+      - key: INTERNAL_CRON_SECRET
+        sync: false
+      - key: FINMIND_API_TOKEN
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
