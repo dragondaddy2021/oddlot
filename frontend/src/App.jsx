@@ -1,5 +1,6 @@
 import { Link, Route, BrowserRouter as Router, Routes, useNavigate } from "react-router-dom";
 import { useAuth } from "./hooks/useAuth";
+import About from "./pages/About";
 import Favorites from "./pages/Favorites";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
@@ -13,6 +14,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/favorites" element={<Favorites />} />
+            <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
           </Routes>
         </div>
@@ -43,6 +45,7 @@ function Navbar() {
         <nav className="flex items-center gap-1 text-sm font-medium text-gray-600">
           <NavLink to="/">首頁</NavLink>
           <NavLink to="/favorites">我的最愛</NavLink>
+          <NavLink to="/about">選股說明</NavLink>
         </nav>
 
         {/* Auth */}
