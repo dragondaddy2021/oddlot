@@ -77,7 +77,7 @@ function Navbar() {
 
 function Footer() {
   return (
-    <footer className="border-t border-gray-200 py-6 mt-8">
+    <footer className="border-t border-gray-200 py-6 mt-8 space-y-1">
       <p className="text-center text-sm text-gray-400">
         商務合作請洽{" "}
         <a
@@ -86,6 +86,9 @@ function Footer() {
         >
           dragondaddy2021@gmail.com
         </a>
+      </p>
+      <p className="text-center text-sm text-gray-400">
+        © 2026 Dragon. All rights reserved.
       </p>
     </footer>
   );
