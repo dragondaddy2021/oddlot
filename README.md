@@ -15,6 +15,7 @@ oddlot 是一個以 AI 驅動的台股零股投資參考平台。每日從台灣
 - **收藏清單**：登入後可將喜歡的股票加入個人收藏，隨時查閱
 - **Google 登入**：透過 Supabase Auth 整合 Google OAuth，快速完成身份驗證
 - **快取機制**：AI 選股結果快取 24 小時，避免重複呼叫 AI API
+- **PWA 支援**：可安裝至手機主畫面，像 App 一樣使用，支援 Android 與 iOS
 
 ---
 
@@ -23,10 +24,11 @@ oddlot 是一個以 AI 驅動的台股零股投資參考平台。每日從台灣
 | 層次       | 技術                                      |
 |------------|-------------------------------------------|
 | 前端       | React 18 + Vite + Tailwind CSS            |
+| PWA        | vite-plugin-pwa（可安裝至手機主畫面）     |
 | 後端       | Python FastAPI + uvicorn                  |
 | 資料庫     | Supabase（PostgreSQL + Row Level Security）|
 | 快取       | Upstash Redis（TTL 86400 秒）             |
-| AI         | Anthropic Claude claude-haiku-4-5-20251001             |
+| AI         | Anthropic Claude claude-haiku-4-5-20251001|
 | 股票資料   | TWSE BWIBBU_d 公開 API（免金鑰）          |
 | 身份驗證   | Supabase Auth（Google OAuth + ES256 JWT） |
 | 限流       | slowapi（一般 60/min，AI 端點 20/hr）     |
@@ -132,6 +134,33 @@ curl -X POST http://localhost:8000/internal/run-daily-recommendation \
 | `VITE_API_BASE_URL`         | 前端 API Base URL（生產環境用）       |
 | `VITE_SUPABASE_URL`         | 前端用 Supabase URL                   |
 | `VITE_SUPABASE_ANON_KEY`    | 前端用 Supabase anon 金鑰             |
+
+---
+
+## PWA 安裝說明
+
+oddlot 支援 PWA（Progressive Web App），可以安裝到手機主畫面，像原生 App 一樣使用。
+
+### Android（Chrome）
+
+1. 用 Chrome 開啟 https://dragondaddy2021.github.io/oddlot
+2. 點右上角選單（⋮）→ **「新增至主畫面」**
+3. 點「新增」確認
+
+### iOS（Safari）
+
+1. 用 Safari 開啟 https://dragondaddy2021.github.io/oddlot
+2. 點下方分享按鈕（□↑）→ **「加入主畫面」**
+3. 點右上角「新增」確認
+
+### 安裝後的差異
+
+| 功能 | 瀏覽器 | 安裝後 |
+|------|:------:|:------:|
+| 全螢幕顯示（無網址列）| ❌ | ✅ |
+| 主畫面捷徑 | ❌ | ✅ |
+| 啟動速度 | 一般 | 較快 |
+| 離線瀏覽 | ❌ | ❌（需網路取得最新選股）|
 
 ---
 
