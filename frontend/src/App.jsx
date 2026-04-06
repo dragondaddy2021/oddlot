@@ -7,13 +7,16 @@ import Login from "./pages/Login";
 export default function App() {
   return (
     <Router>
-      <div className="min-h-screen bg-gray-50">
+      <div className="min-h-screen bg-gray-50 flex flex-col">
         <Navbar />
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/favorites" element={<Favorites />} />
-          <Route path="/login" element={<Login />} />
-        </Routes>
+        <div className="flex-1">
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/favorites" element={<Favorites />} />
+            <Route path="/login" element={<Login />} />
+          </Routes>
+        </div>
+        <Footer />
       </div>
     </Router>
   );
@@ -69,6 +72,22 @@ function Navbar() {
         </div>
       </div>
     </header>
+  );
+}
+
+function Footer() {
+  return (
+    <footer className="border-t border-gray-200 py-6 mt-8">
+      <p className="text-center text-sm text-gray-400">
+        商務合作請洽{" "}
+        <a
+          href="mailto:dragondaddy2021@gmail.com"
+          className="hover:text-gray-600 transition-colors"
+        >
+          dragondaddy2021@gmail.com
+        </a>
+      </p>
+    </footer>
   );
 }
 
