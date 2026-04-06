@@ -148,6 +148,22 @@ def call_claude(candidates: list[dict]) -> list[dict]:
 
 # ── Stage 3: Supabase upsert ───────────────────────────────────────────────────
 
+def already_exists(today: date) -> bool:
+    """Return True if today's recommendations are already in Supabase."""
+    url   = os.environ["SUPABASE_URL"]
+    key   = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    sb    = create_client(url, key)
+
+    result = (
+        sb.table("ai_recommendations")
+        .select("date")
+        .eq("date", today.isoformat())
+        .limit(1)
+        .execute()
+    )
+    return len(result.data) > 0
+
+
 def save_to_supabase(today: date, picks: list[dict]) -> None:
     url   = os.environ["SUPABASE_URL"]
     key   = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
@@ -167,6 +183,15 @@ def main() -> None:
     tz_tw = timezone(timedelta(hours=8))
     today = datetime.now(tz=tz_tw).date()
     print(f"=== Daily selection for {today} (Taiwan time) ===")
+
+    # Skip if today's data already exists (backup cron guard)
+    try:
+        if already_exists(today):
+            print(f"[SKIP] Data for {today} already exists, nothing to do.")
+            sys.exit(0)
+    except Exception as exc:
+        print(f"[WARN] Could not check existing data: {exc}", file=sys.stderr)
+        # Proceed anyway — upsert will handle duplicates safely
 
     try:
         candidates = fetch_candidates()

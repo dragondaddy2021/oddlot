@@ -2,7 +2,8 @@ name: Daily AI Stock Selection
 
 on:
   schedule:
-    - cron: "0 18 * * *"   # 台灣時間凌晨 02:00 (UTC+8 = UTC 18:00)
+    - cron: "0 18 * * *"   # 台灣時間凌晨 02:00（主要）
+    - cron: "0 20 * * *"   # 台灣時間凌晨 04:00（備援）
   workflow_dispatch:        # 手動觸發
 
 jobs:
