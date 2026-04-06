@@ -81,6 +81,16 @@ export default function Home() {
         </div>
       </div>
 
+      {/* Beta notice banner */}
+      <div className="bg-blue-50 border-b border-blue-200">
+        <div className="max-w-7xl mx-auto px-4 py-2 text-center text-blue-700 text-xs sm:text-sm">
+          🚧 本平台目前為測試版，功能持續開發中，歡迎回報問題至{" "}
+          <a href="mailto:dragondaddy2021@gmail.com" className="underline hover:text-blue-900">
+            dragondaddy2021@gmail.com
+          </a>
+        </div>
+      </div>
+
       <main className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-gray-900">今日 AI 選股</h2>

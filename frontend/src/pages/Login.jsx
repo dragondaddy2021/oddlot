@@ -24,6 +24,10 @@ export default function Login() {
           使用 Google 帳號登入
         </button>
 
+        <p className="mt-3 text-xs text-blue-500">
+          登入功能即將開放，敬請期待
+        </p>
+
         <p className="mt-6 text-xs text-gray-400 leading-relaxed">
           登入即表示您同意本平台資訊僅供參考，
           <br />
