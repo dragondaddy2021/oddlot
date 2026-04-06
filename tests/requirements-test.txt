@@ -1,0 +1,6 @@
+requests
+pytest
+pytest-html
+selenium
+webdriver-manager
+appium-python-client

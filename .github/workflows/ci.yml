@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  backend-lint-test:
+  backend-lint:
     runs-on: ubuntu-latest
 
     steps:
@@ -23,7 +23,7 @@ jobs:
           cache: "pip"
           cache-dependency-path: backend/requirements.txt
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         working-directory: backend
         run: pip install -r requirements.txt
 
@@ -33,12 +33,42 @@ jobs:
           pip install ruff
           ruff check .
 
-      - name: Run tests
-        working-directory: backend
-        run: |
-          if [ -d "tests" ]; then
-            pip install pytest
-            pytest tests/ -v
-          else
-            echo "No tests/ directory found, skipping pytest."
-          fi
+  api-and-e2e-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test dependencies
+        run: pip install -r tests/requirements-test.txt
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: Run API tests
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          TEST_BASE_URL: https://dragondaddy2021.github.io/oddlot
+        run: pytest tests/test_api.py -v
+
+      - name: Run Selenium tests
+        env:
+          TEST_BASE_URL: https://dragondaddy2021.github.io/oddlot
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: pytest tests/test_selenium.py -v
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pytest-report
+          path: report.html
+          if-no-files-found: ignore
