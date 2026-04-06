@@ -11,27 +11,25 @@ export default function Home() {
   const [error, setError] = useState(null);
   const [toast, setToast] = useState(null); // { message, type: "success"|"error"|"info" }
   const [addingSet, setAddingSet] = useState(new Set());
+  const [dataDate, setDataDate] = useState(null);
 
   useEffect(() => {
-    // Use Taiwan time (UTC+8) to match the date stored by the daily selection script
-    const today = new Date(Date.now() + 8 * 60 * 60 * 1000)
-      .toISOString()
-      .split("T")[0]; // YYYY-MM-DD in UTC+8
     supabase
       .from("ai_recommendations")
       .select("*")
-      .eq("date", today)
+      .order("date", { ascending: false })
+      .limit(1)
       .single()
       .then(({ data, error: err }) => {
         if (err) {
           if (err.code === "PGRST116") {
-            // no rows found
-            setError("今日選股尚未產生，請稍後再回來查看。");
+            setError("目前尚無選股資料，請稍後再回來查看。");
           } else {
             setError("資料載入失敗，請重新整理頁面。");
           }
         } else {
           setPicks(data?.stocks ?? []);
+          setDataDate(data?.date ?? null);
         }
       })
       .finally(() => setLoading(false));
@@ -100,6 +98,11 @@ export default function Home() {
           <p className="text-gray-500 text-sm mt-1">
             由 Claude AI 從台股上市股票中篩選適合零股長期投資的標的
           </p>
+          {dataDate && (
+            <p className="text-gray-400 text-xs mt-1">
+              更新日期：{dataDate.replaceAll("-", "/")}
+            </p>
+          )}
         </div>
 
         {loading && <SkeletonGrid />}
