@@ -13,7 +13,10 @@ export default function Home() {
   const [addingSet, setAddingSet] = useState(new Set());
 
   useEffect(() => {
-    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    // Use Taiwan time (UTC+8) to match the date stored by the daily selection script
+    const today = new Date(Date.now() + 8 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0]; // YYYY-MM-DD in UTC+8
     supabase
       .from("ai_recommendations")
       .select("*")
