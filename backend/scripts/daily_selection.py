@@ -13,7 +13,7 @@ Required environment variables:
 import json
 import os
 import sys
-from datetime import date, timedelta
+from datetime import date, timedelta, timezone, datetime
 
 import anthropic
 import httpx
@@ -163,8 +163,10 @@ def save_to_supabase(today: date, picks: list[dict]) -> None:
 # ── Entry point ────────────────────────────────────────────────────────────────
 
 def main() -> None:
-    today = date.today()
-    print(f"=== Daily selection for {today} ===")
+    # Use Taiwan time (UTC+8) to match the date queried by the frontend
+    tz_tw = timezone(timedelta(hours=8))
+    today = datetime.now(tz=tz_tw).date()
+    print(f"=== Daily selection for {today} (Taiwan time) ===")
 
     try:
         candidates = fetch_candidates()
