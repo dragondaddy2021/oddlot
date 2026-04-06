@@ -17,15 +17,14 @@ export default function Login() {
         <p className="text-gray-500 text-sm mb-8">台股零股智慧選股平台</p>
 
         <button
-          onClick={signInWithGoogle}
-          className="w-full flex items-center justify-center gap-3 border border-gray-300 rounded-xl px-4 py-3 text-gray-700 font-medium hover:bg-gray-50 transition-colors"
+          disabled
+          className="w-full flex items-center justify-center gap-3 border border-gray-200 rounded-xl px-4 py-3 text-gray-400 font-medium bg-gray-50 cursor-not-allowed"
         >
-          <GoogleIcon />
-          使用 Google 帳號登入
+          🚧 登入功能即將開放
         </button>
 
-        <p className="mt-3 text-xs text-blue-500">
-          登入功能即將開放，敬請期待
+        <p className="mt-3 text-xs text-gray-400">
+          我們正在設定安全登入系統，敬請期待
         </p>
 
         <p className="mt-6 text-xs text-gray-400 leading-relaxed">
