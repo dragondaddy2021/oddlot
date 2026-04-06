@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import api from "../lib/api";
+import { supabase } from "../lib/supabase";
 
 export default function Favorites() {
   const { user, loading: authLoading } = useAuth();
@@ -13,10 +13,18 @@ export default function Favorites() {
   useEffect(() => {
     if (!user) return;
     setLoading(true);
-    api
-      .get("/api/v1/favorites")
-      .then((res) => setFavorites(res.data ?? []))
-      .catch(() => setError("收藏清單載入失敗，請重新整理。"))
+    supabase
+      .from("favorites")
+      .select("*")
+      .eq("user_id", user.id)
+      .order("added_at", { ascending: false })
+      .then(({ data, error: err }) => {
+        if (err) {
+          setError("收藏清單載入失敗，請重新整理。");
+        } else {
+          setFavorites(data ?? []);
+        }
+      })
       .finally(() => setLoading(false));
   }, [user]);
 
@@ -24,10 +32,12 @@ export default function Favorites() {
     if (deletingSet.has(symbol)) return;
     setDeletingSet((prev) => new Set(prev).add(symbol));
     try {
-      await api.delete(`/api/v1/favorites/${symbol}`);
+      await supabase
+        .from("favorites")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("stock_symbol", symbol);
       setFavorites((prev) => prev.filter((f) => f.stock_symbol !== symbol));
-    } catch {
-      // silently ignore — user can retry
     } finally {
       setDeletingSet((prev) => {
         const next = new Set(prev);

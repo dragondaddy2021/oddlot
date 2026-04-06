@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
-import api from "../lib/api";
+import { supabase } from "../lib/supabase";
 
 export default function Home() {
   const { user } = useAuth();
@@ -13,16 +13,22 @@ export default function Home() {
   const [addingSet, setAddingSet] = useState(new Set());
 
   useEffect(() => {
-    api
-      .get("/api/v1/recommendations/today")
-      .then((res) => {
-        setPicks(res.data?.picks ?? []);
-      })
-      .catch((err) => {
-        if (err.response?.status === 404) {
-          setError("今日選股尚未產生，請稍後再回來查看。");
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    supabase
+      .from("ai_recommendations")
+      .select("*")
+      .eq("date", today)
+      .single()
+      .then(({ data, error: err }) => {
+        if (err) {
+          if (err.code === "PGRST116") {
+            // no rows found
+            setError("今日選股尚未產生，請稍後再回來查看。");
+          } else {
+            setError("資料載入失敗，請重新整理頁面。");
+          }
         } else {
-          setError("資料載入失敗，請重新整理頁面。");
+          setPicks(data?.stocks ?? []);
         }
       })
       .finally(() => setLoading(false));
@@ -43,16 +49,19 @@ export default function Home() {
 
     setAddingSet((prev) => new Set(prev).add(symbol));
     try {
-      await api.post("/api/v1/favorites", {
-        symbol: stock.symbol,
-        name: stock.name,
+      const { error: err } = await supabase.from("favorites").insert({
+        user_id: user.id,
+        stock_symbol: stock.symbol,
+        stock_name: stock.name,
       });
-      showToast(`已加入 ${stock.name} 到收藏`, "success");
-    } catch (err) {
-      if (err.response?.status === 409) {
-        showToast(`${stock.name} 已在收藏清單中`, "info");
+      if (err) {
+        if (err.code === "23505") {
+          showToast(`${stock.name} 已在收藏清單中`, "info");
+        } else {
+          showToast("加入收藏失敗，請稍後再試", "error");
+        }
       } else {
-        showToast("加入收藏失敗，請稍後再試", "error");
+        showToast(`已加入 ${stock.name} 到收藏`, "success");
       }
     } finally {
       setAddingSet((prev) => {

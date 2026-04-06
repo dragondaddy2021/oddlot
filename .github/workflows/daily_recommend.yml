@@ -1,0 +1,29 @@
+name: Daily AI Stock Selection
+
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 台灣時間凌晨 02:00 (UTC+8 = UTC 18:00)
+  workflow_dispatch:        # 手動觸發
+
+jobs:
+  select-stocks:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install anthropic httpx supabase pydantic-settings
+
+      - name: Run daily selection
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: python backend/scripts/daily_selection.py

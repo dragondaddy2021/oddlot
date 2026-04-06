@@ -139,6 +139,22 @@ curl -X POST http://localhost:8000/internal/run-daily-recommendation \
 
 ---
 
+## GitHub Secrets 設定
+
+前往 GitHub repo → **Settings → Secrets and variables → Actions → New repository secret**，加入以下 secrets：
+
+| Secret 名稱 | 用途 |
+|---|---|
+| `ANTHROPIC_API_KEY` | Claude AI API 金鑰（每日選股 Action 使用） |
+| `SUPABASE_URL` | Supabase 專案 URL（每日選股 Action 使用） |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role 金鑰（寫入資料庫用） |
+| `VITE_SUPABASE_URL` | Supabase URL（前端 build 時注入） |
+| `VITE_SUPABASE_ANON_KEY` | Supabase anon 金鑰（前端 build 時注入） |
+
+> 設定完成後，推送到 main branch 即會自動觸發前端部署；每日 UTC 18:00（台灣凌晨 02:00）自動執行 AI 選股。
+
+---
+
 ## License
 
 [MIT License](LICENSE) © 2026 Dragon
