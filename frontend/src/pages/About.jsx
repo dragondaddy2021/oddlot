@@ -39,6 +39,14 @@ export default function About() {
                 </ul>
               </li>
               <li>每檔股票附上繁體中文推薦理由（50 字以內）</li>
+              <li>
+                股票卡片會顯示兩項填息指標：
+                <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
+                  <li><strong>填息速度</strong>：近 3 年已填息事件的平均天數（越短越佳）</li>
+                  <li><strong>填息率</strong>：填息事件數 / 除息事件數（越高代表填息機率越高）</li>
+                  <li>顯示「—」代表該股近 3 年無填息紀錄或樣本不足，需搭配其他指標判斷</li>
+                </ul>
+              </li>
             </ul>
           </Section>
 
@@ -57,6 +65,14 @@ export default function About() {
               <li>每日<strong>台灣時間凌晨 2:00</strong> 自動執行選股並更新資料</li>
               <li>非交易日（週末、國定假日）可能顯示前一個交易日的資料</li>
               <li>若當日資料尚未產生，頁面會顯示提示訊息</li>
+            </ul>
+          </Section>
+
+          <Section title="六、會員功能">
+            <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
+              <li><strong>我的最愛</strong>：收藏單檔股票，方便日後追蹤</li>
+              <li><strong>我的 ETF</strong>：自組個人化投資組合，可從我的最愛挑選成分股並設定權重</li>
+              <li className="text-gray-400">目前登入功能尚未開放，相關會員功能敬請期待</li>
             </ul>
           </Section>
 

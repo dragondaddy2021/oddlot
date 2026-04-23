@@ -176,6 +176,16 @@ function StockCard({ stock, onAddFavorite, adding, isLoggedIn }) {
       <div className="grid grid-cols-2 gap-2">
         <Stat label="殖利率" value={stock.yield_rate != null ? `${stock.yield_rate}%` : "—"} color="text-green-600" />
         <Stat label="本益比" value={stock.pe_ratio != null ? `${stock.pe_ratio}x` : "—"} color="text-blue-600" />
+        <Stat
+          label="填息速度"
+          value={stock.avg_fill_days != null ? `${Math.round(stock.avg_fill_days)} 天` : "—"}
+          color="text-amber-600"
+        />
+        <Stat
+          label="填息率"
+          value={stock.fill_rate ? `${Math.round(stock.fill_rate * 100)}%` : "—"}
+          color="text-purple-600"
+        />
       </div>
 
       {/* AI reason */}
@@ -218,6 +228,8 @@ function SkeletonGrid() {
           <div className="h-4 w-16 bg-gray-200 rounded mb-2" />
           <div className="h-5 w-24 bg-gray-200 rounded mb-4" />
           <div className="grid grid-cols-2 gap-2 mb-4">
+            <div className="h-10 bg-gray-200 rounded-lg" />
+            <div className="h-10 bg-gray-200 rounded-lg" />
             <div className="h-10 bg-gray-200 rounded-lg" />
             <div className="h-10 bg-gray-200 rounded-lg" />
           </div>

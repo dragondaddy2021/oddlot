@@ -4,6 +4,7 @@ import About from "./pages/About";
 import Favorites from "./pages/Favorites";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
+import MyETFs from "./pages/MyETFs";
 
 export default function App() {
   return (
@@ -14,6 +15,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Home />} />
             <Route path="/favorites" element={<Favorites />} />
+            <Route path="/my-etfs" element={<MyETFs />} />
             <Route path="/about" element={<About />} />
             <Route path="/login" element={<Login />} />
           </Routes>
@@ -45,6 +47,7 @@ function Navbar() {
         <nav className="flex items-center gap-1 text-sm font-medium text-gray-600">
           <NavLink to="/">首頁</NavLink>
           <NavLink to="/favorites">我的最愛</NavLink>
+          <NavLink to="/my-etfs">我的 ETF</NavLink>
           <NavLink to="/about">選股說明</NavLink>
         </nav>
 

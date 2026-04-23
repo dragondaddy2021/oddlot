@@ -13,6 +13,7 @@ oddlot 是一個以 AI 驅動的台股零股投資參考平台。每日從台灣
 - **今日 AI 選股**：每日自動從 TWSE 取得股票資料，經 Claude AI 篩選出 10 檔適合零股投資的標的
 - **選股理由**：每檔股票附有 AI 產生的繁體中文推薦理由（50 字以內）
 - **收藏清單**：登入後可將喜歡的股票加入個人收藏，隨時查閱
+- **我的 ETF**：自組個人化投資組合，可從我的最愛挑選成分股並設定權重
 - **Google 登入**：透過 Supabase Auth 整合 Google OAuth，快速完成身份驗證
 - **快取機制**：AI 選股結果快取 24 小時，避免重複呼叫 AI API
 - **PWA 支援**：可安裝至手機主畫面，像 App 一樣使用，支援 Android 與 iOS
@@ -123,6 +124,7 @@ cp .env.example .env
 db/migrations/001_create_tables.sql
 db/migrations/002_enable_rls.sql
 db/migrations/003_create_indexes.sql
+db/migrations/004_create_custom_etfs.sql
 ```
 
 ### 3. 啟動後端

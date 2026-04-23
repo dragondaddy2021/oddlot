@@ -62,14 +62,8 @@ export default function Favorites() {
       <div className="min-h-[60vh] flex items-center justify-center px-4">
         <div className="text-center">
           <p className="text-5xl mb-4">🔒</p>
-          <h2 className="text-xl font-bold text-gray-800 mb-2">請先登入</h2>
-          <p className="text-gray-500 text-sm mb-6">登入後即可管理你的收藏清單</p>
-          <Link
-            to="/login"
-            className="inline-block bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-medium transition-colors"
-          >
-            前往登入
-          </Link>
+          <h2 className="text-xl font-bold text-gray-800 mb-2">此功能需要登入，敬請期待</h2>
+          <p className="text-gray-500 text-sm">登入開放後即可管理你的收藏清單</p>
         </div>
       </div>
     );
