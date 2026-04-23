@@ -19,6 +19,7 @@ export default function About() {
               <li>股價 <strong>10～500 元</strong>（適合零股小額投資）</li>
               <li>本益比 <strong>大於 0</strong>（排除虧損股）</li>
               <li>殖利率 <strong>大於 0</strong>（有過去配息紀錄）</li>
+              <li><strong>近 3 年每年至少配息一次</strong>（排除不穩定配息股）</li>
               <li>排除 ETF 及特殊商品（專注一般上市個股）</li>
               <li>從符合條件的股票中依殖利率由高到低排序，取前 <strong>50 檔</strong>送入 AI 分析</li>
             </ul>
@@ -34,6 +35,7 @@ export default function About() {
                   <li>本益比合理性</li>
                   <li>產業分散度</li>
                   <li>股價親民度（適合零股小額累積）</li>
+                  <li>填息速度與填息率（參考近 3 年 TWSE 除權息與日收盤資料計算）</li>
                 </ul>
               </li>
               <li>每檔股票附上繁體中文推薦理由（50 字以內）</li>
@@ -58,6 +60,15 @@ export default function About() {
             </ul>
           </Section>
 
+        </div>
+
+        <div className="mt-10 pt-6 border-t border-gray-100 text-center">
+          <p className="text-xs text-gray-500">
+            特別感謝選股邏輯檢視員：Wen Cheng 🐟
+          </p>
+          <p className="text-xs text-gray-400 mt-2">
+            © 2026 oddlot
+          </p>
         </div>
       </main>
     </div>
