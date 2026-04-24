@@ -28,6 +28,14 @@ TWSE_BWIBBU    = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"
 TWSE_T49U      = "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
 TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
 
+# TWSE 部分端點（STOCK_DAY）會擋無 UA 或 python-httpx 的請求，改用瀏覽器 UA 繞過
+TWSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.twse.com.tw/",
+}
+
 AI_MODEL = "claude-haiku-4-5-20251001"
 MAX_CANDIDATES = 50
 FILL_CHECK_POOL = 80   # 計算填息前先取的候選數（預留過濾 0 填息股的 buffer）
@@ -98,7 +106,7 @@ def _strip_code_fence(text: str) -> str:
 
 def fetch_candidates() -> list[dict]:
     """Return all valid BWIBBU_d candidates sorted by yield (no top slicing)."""
-    with httpx.Client(timeout=20, follow_redirects=True) as client:
+    with httpx.Client(timeout=20, follow_redirects=True, headers=TWSE_HEADERS) as client:
         for days_back in range(7):
             d = (date.today() - timedelta(days=days_back)).strftime("%Y%m%d")
             try:
@@ -294,7 +302,7 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
     current_year = date.today().year
     target_years = set(range(current_year - DIVIDEND_YEARS, current_year))
 
-    with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True) as client:
+    with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True, headers=TWSE_HEADERS) as client:
         print(f"[Dividend] fetching TWT49U for years {sorted(target_years)}...")
         events_map = _fetch_dividend_events(client, DIVIDEND_YEARS)
         print(f"[Dividend] {len(events_map)} stocks have ex-dividend records in that window")
