@@ -37,22 +37,14 @@ function Navbar() {
 
   return (
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-      <div className="max-w-7xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+      <div className="max-w-7xl mx-auto px-4 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-2 gap-x-4">
         {/* Logo */}
-        <Link to="/" className="text-xl font-black text-blue-600 tracking-tight shrink-0">
+        <Link to="/" className="order-1 text-xl font-black text-blue-600 tracking-tight shrink-0">
           oddlot
         </Link>
 
-        {/* Nav links */}
-        <nav className="flex items-center gap-1 text-sm font-medium text-gray-600">
-          <NavLink to="/">首頁</NavLink>
-          <NavLink to="/favorites">我的最愛</NavLink>
-          <NavLink to="/my-etfs">我的 ETF</NavLink>
-          <NavLink to="/about">選股說明</NavLink>
-        </nav>
-
-        {/* Auth */}
-        <div className="shrink-0">
+        {/* Auth — mobile: same row as logo; desktop: far right */}
+        <div className="order-2 sm:order-3 shrink-0">
           {loading ? (
             <div className="h-8 w-20 bg-gray-100 rounded-lg animate-pulse" />
           ) : user ? (
@@ -76,6 +68,14 @@ function Navbar() {
             </Link>
           )}
         </div>
+
+        {/* Nav links — mobile: wraps to second row, full width, can scroll horizontally if needed */}
+        <nav className="order-3 sm:order-2 w-full sm:w-auto flex items-center gap-1 text-sm font-medium text-gray-600 overflow-x-auto -mx-1 px-1">
+          <NavLink to="/">首頁</NavLink>
+          <NavLink to="/favorites">我的最愛</NavLink>
+          <NavLink to="/my-etfs">我的 ETF</NavLink>
+          <NavLink to="/about">選股說明</NavLink>
+        </nav>
       </div>
     </header>
   );
