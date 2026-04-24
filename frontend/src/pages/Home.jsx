@@ -188,6 +188,14 @@ function StockCard({ stock, onAddFavorite, adding, isLoggedIn }) {
         />
       </div>
 
+      {/* Last dividend */}
+      <p className="text-xs text-gray-500">
+        上次配息：
+        <span className="font-medium text-gray-700 tabular-nums">
+          {stock.last_ex_date ? stock.last_ex_date.replaceAll("-", "/") : "—"}
+        </span>
+      </p>
+
       {/* AI reason */}
       <p className="text-gray-600 text-sm leading-relaxed flex-1">
         {stock.reason}

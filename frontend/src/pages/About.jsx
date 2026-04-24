@@ -20,6 +20,7 @@ export default function About() {
               <li>本益比 <strong>大於 0</strong>（排除虧損股）</li>
               <li>殖利率 <strong>大於 0</strong>（有過去配息紀錄）</li>
               <li><strong>近 3 年每年至少配息一次</strong>（排除不穩定配息股）</li>
+              <li><strong>近 3 年至少成功填息 1 次</strong>（排除長期無法填息的股票）</li>
               <li>排除 ETF 及特殊商品（專注一般上市個股）</li>
               <li>從符合條件的股票中依殖利率由高到低排序，取前 <strong>50 檔</strong>送入 AI 分析</li>
             </ul>
@@ -44,8 +45,11 @@ export default function About() {
                 <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
                   <li><strong>填息速度</strong>：近 3 年已填息事件的平均天數（越短越佳）</li>
                   <li><strong>填息率</strong>：填息事件數 / 除息事件數（越高代表填息機率越高）</li>
-                  <li>顯示「—」代表該股近 3 年無填息紀錄或樣本不足，需搭配其他指標判斷</li>
+                  <li>顯示「—」代表該股樣本不足或資料尚未更新，需搭配其他指標判斷</li>
                 </ul>
+              </li>
+              <li>
+                <strong>上次配息</strong>：近 3 年內最近一次除息日（TWSE TWT49U 資料），可參考配息頻率與時間點
               </li>
             </ul>
           </Section>

@@ -30,6 +30,7 @@ TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
 
 AI_MODEL = "claude-haiku-4-5-20251001"
 MAX_CANDIDATES = 50
+FILL_CHECK_POOL = 80   # 計算填息前先取的候選數（預留過濾 0 填息股的 buffer）
 PRICE_MIN = 10.0
 PRICE_MAX = 500.0
 
@@ -97,7 +98,7 @@ def _strip_code_fence(text: str) -> str:
 
 def fetch_candidates() -> list[dict]:
     """Return all valid BWIBBU_d candidates sorted by yield (no top slicing)."""
-    with httpx.Client(timeout=20) as client:
+    with httpx.Client(timeout=20, follow_redirects=True) as client:
         for days_back in range(7):
             d = (date.today() - timedelta(days=days_back)).strftime("%Y%m%d")
             try:
@@ -164,22 +165,30 @@ def _fetch_dividend_events(client: httpx.Client, years: int) -> dict[str, list[d
     for y in target_years:
         start = f"{y}0101"
         end   = f"{y}1231"
-        try:
-            resp = client.get(
-                TWSE_T49U,
-                params={"startDate": start, "endDate": end, "response": "json"},
-            )
-            resp.raise_for_status()
-            body = resp.json()
-        except Exception as exc:
-            print(f"[TWT49U] year {y} failed: {exc}", file=sys.stderr)
-            time.sleep(TWSE_DELAY)
-            continue
+        body = None
+        for attempt in range(3):
+            try:
+                resp = client.get(
+                    TWSE_T49U,
+                    params={"startDate": start, "endDate": end, "response": "json"},
+                )
+                resp.raise_for_status()
+                body = resp.json()
+                break
+            except Exception as exc:
+                wait = TWSE_DELAY * (attempt + 2)
+                print(
+                    f"[TWT49U] year {y} attempt {attempt+1}/3 failed: {exc}; retry in {wait:.1f}s",
+                    file=sys.stderr,
+                )
+                time.sleep(wait)
+                body = None
 
-        if body.get("stat") != "OK":
-            print(f"[TWT49U] year {y} stat={body.get('stat')}", file=sys.stderr)
-            time.sleep(TWSE_DELAY)
-            continue
+        if not body or body.get("stat") != "OK":
+            raise RuntimeError(
+                f"TWT49U year {y} unavailable after retries "
+                f"(stat={body.get('stat') if body else 'no-response'})"
+            )
 
         rows = body.get("data", [])
         count = 0
@@ -275,16 +284,17 @@ def _compute_fill_days(
 
 
 def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
-    """Filter candidates by 近 N 年每年至少配息一次 and compute fill-days stats.
+    """Filter candidates by 近 N 年每年至少配息一次 + 至少成功填息 1 次，
+    and compute fill-days stats.
 
     Adds fields: avg_fill_days, fill_rate, fill_samples.
-    Slices to MAX_CANDIDATES (by yield) before running the expensive STOCK_DAY
-    lookups.
+    Takes top FILL_CHECK_POOL by yield before the expensive STOCK_DAY lookups,
+    then removes stocks with zero successful fills, finally trims to MAX_CANDIDATES.
     """
     current_year = date.today().year
     target_years = set(range(current_year - DIVIDEND_YEARS, current_year))
 
-    with httpx.Client(timeout=TWSE_TIMEOUT) as client:
+    with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True) as client:
         print(f"[Dividend] fetching TWT49U for years {sorted(target_years)}...")
         events_map = _fetch_dividend_events(client, DIVIDEND_YEARS)
         print(f"[Dividend] {len(events_map)} stocks have ex-dividend records in that window")
@@ -298,12 +308,12 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
                 eligible.append(c)
         print(f"[Dividend] {len(eligible)}/{len(raw)} candidates satisfy 'annual dividend × {DIVIDEND_YEARS}y'")
 
-        # Slice to top MAX_CANDIDATES by yield before expensive fill-days lookup
-        top = eligible[:MAX_CANDIDATES]
-        print(f"[Dividend] computing fill-days for top {len(top)}...")
+        # Slice to a larger pool by yield; we'll drop 0-fill stocks after computing
+        pool = eligible[:FILL_CHECK_POOL]
+        print(f"[Dividend] computing fill-days for top {len(pool)} (pool size {FILL_CHECK_POOL})...")
 
         cache: dict = {}
-        for idx, c in enumerate(top, 1):
+        for idx, c in enumerate(pool, 1):
             events = [e for e in events_map.get(c["symbol"], []) if e["year"] in target_years]
             fill_list: list[int] = []
             for ev in events:
@@ -315,8 +325,16 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
             c["avg_fill_days"] = round(sum(fill_list) / len(fill_list), 1) if fill_list else None
             c["fill_rate"]     = round(len(fill_list) / total, 2) if total else 0.0
             c["fill_samples"]  = len(fill_list)
+            c["last_ex_date"]  = max(e["ex_date"] for e in events).isoformat() if events else None
             if idx % 10 == 0:
-                print(f"[Dividend] progress {idx}/{len(top)}")
+                print(f"[Dividend] progress {idx}/{len(pool)}")
+
+        # Require 近 N 年至少成功填息 1 次
+        filled = [c for c in pool if c["fill_samples"] > 0]
+        print(f"[Dividend] {len(filled)}/{len(pool)} pool stocks have >=1 successful fill event")
+
+        top = filled[:MAX_CANDIDATES]
+        print(f"[Dividend] final candidates for AI: {len(top)}")
 
     return top
 
@@ -331,7 +349,8 @@ def call_claude(candidates: list[dict]) -> list[dict]:
         "請回傳純 JSON（不含 markdown code block），格式如下：\n"
         '{"picks": [{"symbol": "2330", "name": "台積電", "reason": "50字以內繁中推薦理由",'
         ' "yield_rate": 2.5, "pe_ratio": 18.2, "price": 850.0,'
-        ' "avg_fill_days": 30.5, "fill_rate": 1.0, "fill_samples": 3}]}'
+        ' "avg_fill_days": 30.5, "fill_rate": 1.0, "fill_samples": 3,'
+        ' "last_ex_date": "2025-07-15"}]}'
     )
 
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
