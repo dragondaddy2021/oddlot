@@ -26,7 +26,7 @@ from supabase import create_client
 # ── Constants ──────────────────────────────────────────────────────────────────
 TWSE_BWIBBU    = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"
 TWSE_T49U      = "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
-TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
+TWSE_STOCK_DAY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"  # exchangeReport 路徑不擋雲端 IP（同 BWIBBU_d）
 
 # TWSE 部分端點（STOCK_DAY）會擋無 UA 或 python-httpx 的請求，改用瀏覽器 UA 繞過
 TWSE_HEADERS = {
