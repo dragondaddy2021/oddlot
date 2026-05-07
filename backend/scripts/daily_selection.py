@@ -53,6 +53,33 @@ COL_PRICE  = 2
 COL_YIELD  = 3
 COL_PE     = 5
 
+# Sanity bound: 台股殖利率 > 30% 幾乎必為解析錯誤（欄位錯位 / 股利年度被讀成殖利率）
+YIELD_SANITY_MAX = 30.0
+
+# 用 BWIBBU_d 回傳的 fields 標籤動態定位欄位，避免 schema 變動時靜默對錯欄
+BWIBBU_FIELD_KEYS = {
+    "price": "收盤價",
+    "yield": "殖利率",
+    "pe":    "本益比",
+}
+
+
+def _resolve_bwibbu_columns(fields: list[str]) -> dict[str, int]:
+    """Map logical name → column index by substring-matching the field label.
+
+    Falls back to the legacy COL_* constants if a label can't be located, so
+    cached/older response shapes still work.
+    """
+    fallback = {"price": COL_PRICE, "yield": COL_YIELD, "pe": COL_PE}
+    resolved: dict[str, int] = {}
+    for key, label in BWIBBU_FIELD_KEYS.items():
+        idx = next((i for i, f in enumerate(fields) if label in str(f)), None)
+        if idx is None:
+            print(f"[TWSE] field '{label}' missing in response — falling back to index {fallback[key]}", file=sys.stderr)
+            idx = fallback[key]
+        resolved[key] = idx
+    return resolved
+
 # TWT49U 欄位：[資料日期, 股票代號, 股票名稱, 除權息前收盤價, 除權息參考價, ...]
 T49_COL_DATE     = 0
 T49_COL_SYMBOL   = 1
@@ -122,28 +149,42 @@ def fetch_candidates() -> list[dict]:
 
             if body.get("stat") == "OK" and body.get("data"):
                 rows = body["data"]
+                fields = body.get("fields", [])
                 print(f"[TWSE] loaded {len(rows)} rows for {d}")
                 break
         else:
             raise RuntimeError("TWSE returned no data for the last 7 days")
 
+    cols = _resolve_bwibbu_columns(fields)
+    print(f"[TWSE] resolved columns: {cols} from fields {fields}")
+    px_i, yd_i, pe_i = cols["price"], cols["yield"], cols["pe"]
+    expected_len = max(COL_SYMBOL, COL_NAME, px_i, yd_i, pe_i) + 1
+
     candidates = []
+    bad_shape = bad_yield = 0
     for row in rows:
+        if len(row) < expected_len:
+            bad_shape += 1
+            continue
+
         symbol = str(row[COL_SYMBOL]).strip()
         name   = str(row[COL_NAME]).strip()
 
         if not (symbol.isdigit() and len(symbol) == 4 and not symbol.startswith("0")):
             continue
 
-        price      = _parse_float(row[COL_PRICE])
-        yield_rate = _parse_float(row[COL_YIELD])
-        pe         = _parse_float(row[COL_PE])
+        price      = _parse_float(row[px_i])
+        yield_rate = _parse_float(row[yd_i])
+        pe         = _parse_float(row[pe_i])
 
         if price is None or yield_rate is None or pe is None:
             continue
         if not (PRICE_MIN <= price <= PRICE_MAX):
             continue
         if pe <= 0 or yield_rate <= 0:
+            continue
+        if yield_rate > YIELD_SANITY_MAX:
+            bad_yield += 1
             continue
 
         candidates.append({
@@ -155,7 +196,10 @@ def fetch_candidates() -> list[dict]:
         })
 
     candidates.sort(key=lambda x: x["yield_rate"], reverse=True)
-    print(f"[TWSE] {len(rows)} rows → {len(candidates)} candidates after basic filter")
+    print(
+        f"[TWSE] {len(rows)} rows → {len(candidates)} candidates after basic filter "
+        f"(dropped: bad_shape={bad_shape}, yield>{YIELD_SANITY_MAX:g}%={bad_yield})"
+    )
     return candidates
 
 
