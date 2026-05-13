@@ -158,10 +158,49 @@ def _minguo_to_date(s: str) -> date | None:
         return None
 
 
-def _strip_code_fence(text: str) -> str:
+def _extract_json(text: str) -> str:
+    """Extract JSON object from Claude response. Handles:
+    - bare JSON: `{...}`
+    - fenced JSON: ```json\n{...}\n```
+    - prose preamble: `好的，以下是結果：\n{...}`
+    - prose trailing: `{...}\n以上為...`
+    """
     text = text.strip()
-    m = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", text)
-    return m.group(1).strip() if m else text
+
+    # Try fenced first (anywhere in response, not just whole-message)
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", text)
+    if m:
+        return m.group(1).strip()
+
+    # Find first '{', then walk to its matching close brace
+    start = text.find("{")
+    if start == -1:
+        return text  # let json.loads raise
+
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == "\\":
+            escape = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+
+    return text[start:]  # unbalanced — let json.loads raise
 
 
 # ── Stage 1: TWSE BWIBBU_d ─────────────────────────────────────────────────────
@@ -601,7 +640,7 @@ def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
         try:
             return client.messages.create(
                 model=AI_MODEL,
-                max_tokens=2000,
+                max_tokens=4000,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_msg}],
             )
@@ -646,7 +685,8 @@ def call_claude(candidates: list[dict]) -> list[dict]:
 
     for attempt in range(2):
         msg = _claude_create_with_retry(client, user_msg)
-        raw = _strip_code_fence(msg.content[0].text)
+        original = msg.content[0].text if msg.content else ""
+        raw = _extract_json(original)
         try:
             result = json.loads(raw)
             picks = result.get("picks", [])
@@ -654,6 +694,8 @@ def call_claude(candidates: list[dict]) -> list[dict]:
             return picks
         except json.JSONDecodeError as exc:
             print(f"[Claude] JSON parse error (attempt {attempt+1}/2): {exc}", file=sys.stderr)
+            print(f"[Claude] raw response (first 300 chars): {original[:300]!r}", file=sys.stderr)
+            print(f"[Claude] extracted (first 300 chars): {raw[:300]!r}", file=sys.stderr)
 
     raise RuntimeError("Claude returned invalid JSON after 2 attempts")
 
