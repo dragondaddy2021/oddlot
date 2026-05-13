@@ -159,15 +159,22 @@ function StockCard({ stock, onAddFavorite, adding, isLoggedIn }) {
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
       {/* Header */}
       <div className="flex items-start justify-between">
-        <div>
-          <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
-            {stock.symbol}
-          </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-mono bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md">
+              {stock.symbol}
+            </span>
+            {stock.industry && (
+              <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-md">
+                {stock.industry}
+              </span>
+            )}
+          </div>
           <h3 className="font-bold text-gray-900 mt-1 text-base leading-tight">
             {stock.name}
           </h3>
         </div>
-        <span className="text-xl font-bold text-gray-900 tabular-nums">
+        <span className="text-xl font-bold text-gray-900 tabular-nums shrink-0 ml-2">
           ${stock.price?.toFixed(2) ?? "—"}
         </span>
       </div>
