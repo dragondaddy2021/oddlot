@@ -19,6 +19,7 @@ import re
 import sys
 import time
 from datetime import date, timedelta, timezone, datetime
+from pathlib import Path
 
 import anthropic
 import httpx
@@ -81,21 +82,50 @@ def _resolve_bwibbu_columns(fields: list[str]) -> dict[str, int]:
         resolved[key] = idx
     return resolved
 
-# TWT49U 欄位：[資料日期, 股票代號, 股票名稱, 除權息前收盤價, 除權息參考價, ...]
-T49_COL_DATE     = 0
-T49_COL_SYMBOL   = 1
-T49_COL_BASELINE = 3
+# TWT49U 欄位：[資料日期, 股票代號, 股票名稱, 除權息前收盤價, 除權息參考價, 權值+息值, ...]
+T49_COL_DATE      = 0
+T49_COL_SYMBOL    = 1
+T49_COL_BASELINE  = 3   # 除權息前收盤價（填息基準價）
+T49_COL_DIV_VALUE = 5   # 權值+息值（每股配發價值）
 
 # STOCK_DAY 欄位：[日期, 成交股數, 成交金額, 開盤價, 最高價, 最低價, 收盤價, ...]
 SD_COL_DATE  = 0
 SD_COL_CLOSE = 6
 
+# ── 產業分類（TWSE OpenAPI t187ap03_L 回傳的「產業別」是代碼，需自行對照） ──
+TWSE_OPENAPI_BASIC = "https://openapi.twse.com.tw/v1/opendata/t187ap03_L"
+
+SECTOR_CODE_MAP = {
+    "01": "水泥工業", "02": "食品工業", "03": "塑膠工業", "04": "紡織纖維",
+    "05": "電機機械", "06": "電器電纜", "08": "玻璃陶瓷", "09": "造紙工業",
+    "10": "鋼鐵工業", "11": "橡膠工業", "12": "汽車工業", "14": "建材營造",
+    "15": "航運業",   "16": "觀光餐旅", "17": "金融保險", "18": "貿易百貨",
+    "20": "其他",     "21": "化學工業", "22": "生技醫療", "23": "油電燃氣",
+    "24": "半導體",   "25": "電腦及週邊設備", "26": "光電",
+    "27": "通信網路", "28": "電子零組件", "29": "電子通路",
+    "30": "資訊服務", "31": "其他電子", "35": "綠能環保",
+    "36": "數位雲端", "37": "運動休閒", "38": "居家生活", "91": "存託憑證",
+}
+
+CACHE_DIR         = Path(__file__).parent / "cache"
+SECTOR_CACHE      = CACHE_DIR / "sectors.json"
+SECTOR_CACHE_DAYS = 7
+
+# ── 自組 ETF 篩選參數 ──
+DIVIDEND_CV_MAX = 0.4   # 近 N 年配息金額變異係數上限（剔除一次性高配發 / 景氣循環）
+SECTOR_CAP      = 3     # 每個產業最多送進 AI 的檔數
+
 SYSTEM_PROMPT = (
-    "你是台股零股投資分析助理。以下資料僅供參考，不構成投資建議，"
-    "投資人須自行評估風險。請從候選清單中選出最適合零股長期投資的 10 檔，"
-    "考量因素：殖利率穩定性、本益比合理性、產業分散度、股價親民度、"
-    "填息速度與填息率（avg_fill_days 越小越佳、fill_rate 越高代表填息機率越高）。"
-    "注意：fill_samples 偏低（< 2）時該指標參考性降低，勿過度依賴。"
+    "你是台股零股投資分析助理，協助小資族挑選適合長期持有、自組 ETF 的個股。"
+    "以下資料僅供參考，不構成投資建議，投資人須自行評估風險。"
+    "請從候選清單中選出 10 檔組成一個產業分散、配息穩定的長期投資組合。"
+    "考量因素（按重要性排序）："
+    "(1) 配息穩定度 dividend_cv（越低越好，<0.2 為非常穩定）；"
+    "(2) 產業分散度 industry（避免同產業集中，盡量涵蓋 6 個以上不同產業）；"
+    "(3) 填息速度與填息率（avg_fill_days 越小、fill_rate 越高越佳）；"
+    "(4) 殖利率與本益比合理性（高殖利率不是首要目標，>8% 通常隱含風險）；"
+    "(5) 股價親民度。"
+    "注意：fill_samples < 2 時該指標參考性降低，勿過度依賴。"
 )
 
 
@@ -250,13 +280,15 @@ def _fetch_dividend_events(client: httpx.Client, years: int) -> dict[str, list[d
             # 僅收四碼一般股（排除 ETF / 權證 / 債券）
             if not (symbol.isdigit() and len(symbol) == 4 and not symbol.startswith("0")):
                 continue
-            ex_date  = _minguo_to_date(row[T49_COL_DATE])
-            baseline = _parse_float(row[T49_COL_BASELINE])
+            ex_date   = _minguo_to_date(row[T49_COL_DATE])
+            baseline  = _parse_float(row[T49_COL_BASELINE])
+            div_value = _parse_float(row[T49_COL_DIV_VALUE]) if len(row) > T49_COL_DIV_VALUE else None
             if ex_date is None or baseline is None or baseline <= 0:
                 continue
             events.setdefault(symbol, []).append({
                 "ex_date": ex_date,
                 "baseline": baseline,
+                "dividend_value": div_value or 0.0,
                 "year": ex_date.year,
             })
             count += 1
@@ -336,34 +368,132 @@ def _compute_fill_days(
     return None
 
 
-def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
-    """Filter candidates by 近 N 年每年至少配息一次 + 至少成功填息 1 次，
-    and compute fill-days stats.
+def _load_sectors() -> dict[str, str]:
+    """Return {symbol: industry_name}. Cached on disk for SECTOR_CACHE_DAYS days."""
+    if SECTOR_CACHE.exists():
+        age_sec = time.time() - SECTOR_CACHE.stat().st_mtime
+        if age_sec < SECTOR_CACHE_DAYS * 86400:
+            try:
+                cached = json.loads(SECTOR_CACHE.read_text(encoding="utf-8"))
+                print(f"[Sector] cache hit ({len(cached)} symbols, age {age_sec/3600:.1f}h)")
+                return cached
+            except Exception as exc:
+                print(f"[Sector] cache load failed: {exc}; refetching", file=sys.stderr)
 
-    Adds fields: avg_fill_days, fill_rate, fill_samples.
-    Takes top FILL_CHECK_POOL by yield before the expensive STOCK_DAY lookups,
-    then removes stocks with zero successful fills, finally trims to MAX_CANDIDATES.
+    print("[Sector] fetching TWSE OpenAPI t187ap03_L...")
+    resp = httpx.get(TWSE_OPENAPI_BASIC, timeout=30, headers=TWSE_HEADERS)
+    resp.raise_for_status()
+    rows = resp.json()
+    sectors: dict[str, str] = {}
+    for row in rows:
+        sym  = str(row.get("公司代號", "")).strip()
+        code = str(row.get("產業別", "")).strip()
+        if sym and code:
+            sectors[sym] = SECTOR_CODE_MAP.get(code, f"其他({code})")
+
+    CACHE_DIR.mkdir(exist_ok=True)
+    SECTOR_CACHE.write_text(json.dumps(sectors, ensure_ascii=False), encoding="utf-8")
+    print(f"[Sector] cached {len(sectors)} symbol→industry mappings")
+    return sectors
+
+
+def _annual_dividend_cv(events: list[dict], target_years: set[int]) -> float | None:
+    """Sum dividend value per year, then return CV (stddev/mean) across target_years.
+
+    Returns None when any target year has zero distributed value or annual mean ≤ 0
+    (cannot judge stability — caller should treat as unstable / exclude).
+    """
+    by_year: dict[int, float] = {y: 0.0 for y in target_years}
+    for ev in events:
+        if ev["year"] in target_years:
+            by_year[ev["year"]] += ev.get("dividend_value", 0.0)
+
+    values = list(by_year.values())
+    if any(v <= 0 for v in values):
+        return None
+    mean = sum(values) / len(values)
+    if mean <= 0:
+        return None
+    var = sum((v - mean) ** 2 for v in values) / len(values)
+    return (var ** 0.5) / mean
+
+
+def _apply_sector_cap(
+    candidates: list[dict],
+    sectors: dict[str, str],
+    cap: int,
+) -> list[dict]:
+    """Keep ≤ `cap` stocks per industry, preserving input order.
+
+    Mutates each kept candidate to include `industry`.
+    """
+    counts: dict[str, int] = {}
+    out: list[dict] = []
+    for c in candidates:
+        industry = sectors.get(c["symbol"], "未分類")
+        if counts.get(industry, 0) >= cap:
+            continue
+        c["industry"] = industry
+        counts[industry] = counts.get(industry, 0) + 1
+        out.append(c)
+    return out
+
+
+def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
+    """Filter & enrich candidates for the self-assembled-ETF use case.
+
+    Pipeline:
+      1. 年年配息（近 N 年每年至少 1 次除息）
+      2. 配息穩定度 CV ≤ DIVIDEND_CV_MAX（剔除一次性高配發 / 景氣循環）
+      3. 產業分散：每個 industry 最多 SECTOR_CAP 檔
+      4. 至少成功填息 1 次（近 N 年內）
+
+    Adds fields: dividend_cv, industry, avg_fill_days, fill_rate, fill_samples,
+                 last_ex_date.
     """
     current_year = date.today().year
     target_years = set(range(current_year - DIVIDEND_YEARS, current_year))
+
+    sectors = _load_sectors()
 
     with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True, headers=TWSE_HEADERS) as client:
         print(f"[Dividend] fetching TWT49U for years {sorted(target_years)}...")
         events_map = _fetch_dividend_events(client, DIVIDEND_YEARS)
         print(f"[Dividend] {len(events_map)} stocks have ex-dividend records in that window")
 
-        # Filter: 每個目標年度都至少有 1 次除息
-        eligible = []
+        # ── Stage A: 年年配息 + CV 穩定度 ─────────────────────────────────────
+        eligible: list[dict] = []
+        cv_dropped = year_dropped = 0
         for c in raw:
             events = events_map.get(c["symbol"], [])
             years_seen = {e["year"] for e in events}
-            if target_years.issubset(years_seen):
-                eligible.append(c)
-        print(f"[Dividend] {len(eligible)}/{len(raw)} candidates satisfy 'annual dividend × {DIVIDEND_YEARS}y'")
+            if not target_years.issubset(years_seen):
+                year_dropped += 1
+                continue
+            cv = _annual_dividend_cv(events, target_years)
+            if cv is None or cv > DIVIDEND_CV_MAX:
+                cv_dropped += 1
+                continue
+            c["dividend_cv"] = round(cv, 3)
+            eligible.append(c)
+        print(
+            f"[Dividend] {len(eligible)}/{len(raw)} pass annual×{DIVIDEND_YEARS}y + CV≤{DIVIDEND_CV_MAX} "
+            f"(dropped: missing_year={year_dropped}, unstable={cv_dropped})"
+        )
 
-        # Slice to a larger pool by yield; we'll drop 0-fill stocks after computing
-        pool = eligible[:FILL_CHECK_POOL]
-        print(f"[Dividend] computing fill-days for top {len(pool)} (pool size {FILL_CHECK_POOL})...")
+        # ── Stage B: 產業分散 ────────────────────────────────────────────────
+        diversified = _apply_sector_cap(eligible, sectors, SECTOR_CAP)
+        industry_breakdown = {}
+        for c in diversified:
+            industry_breakdown[c["industry"]] = industry_breakdown.get(c["industry"], 0) + 1
+        print(
+            f"[Sector] {len(diversified)} after cap (≤{SECTOR_CAP}/industry, "
+            f"{len(industry_breakdown)} industries)"
+        )
+
+        # ── Stage C: fill 計算（限制 FILL_CHECK_POOL 避免 TWSE 請求爆量） ────
+        pool = diversified[:FILL_CHECK_POOL]
+        print(f"[Dividend] computing fill-days for {len(pool)} stocks (pool={FILL_CHECK_POOL})...")
 
         cache: dict = {}
         for idx, c in enumerate(pool, 1):
@@ -382,9 +512,9 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
             if idx % 10 == 0:
                 print(f"[Dividend] progress {idx}/{len(pool)}")
 
-        # Require 近 N 年至少成功填息 1 次
+        # ── Stage D: 至少成功填息 1 次 ──────────────────────────────────────
         filled = [c for c in pool if c["fill_samples"] > 0]
-        print(f"[Dividend] {len(filled)}/{len(pool)} pool stocks have >=1 successful fill event")
+        print(f"[Dividend] {len(filled)}/{len(pool)} have ≥1 successful fill")
 
         top = filled[:MAX_CANDIDATES]
         print(f"[Dividend] final candidates for AI: {len(top)}")
@@ -435,12 +565,13 @@ def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
 
 def call_claude(candidates: list[dict]) -> list[dict]:
     user_msg = (
-        "候選股票清單（含過去 3 年填息資料）：\n"
+        "候選股票清單（含過去 3 年填息資料、配息穩定度、產業別）：\n"
         + json.dumps(candidates, ensure_ascii=False, indent=2)
         + "\n\n"
         "請回傳純 JSON（不含 markdown code block），格式如下：\n"
         '{"picks": [{"symbol": "2330", "name": "台積電", "reason": "50字以內繁中推薦理由",'
         ' "yield_rate": 2.5, "pe_ratio": 18.2, "price": 850.0,'
+        ' "industry": "半導體", "dividend_cv": 0.15,'
         ' "avg_fill_days": 30.5, "fill_rate": 1.0, "fill_samples": 3,'
         ' "last_ex_date": "2025-07-15"}]}'
     )
@@ -547,9 +678,12 @@ def main() -> None:
             if p.get("fill_samples")
             else "fill=N/A"
         )
+        cv = p.get("dividend_cv")
+        cv_info = f"cv={cv}" if cv is not None else "cv=N/A"
+        industry = p.get("industry", "?")
         print(
-            f"  {p['symbol']} {p['name']}  yield={p['yield_rate']}%  "
-            f"PE={p['pe_ratio']}  ${p['price']}  {fill_info}"
+            f"  {p['symbol']} {p['name']} [{industry}]  yield={p['yield_rate']}%  "
+            f"PE={p['pe_ratio']}  ${p['price']}  {cv_info}  {fill_info}"
         )
 
 
