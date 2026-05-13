@@ -10,34 +10,54 @@ export default function About() {
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>股票資料來自<strong>台灣證券交易所（TWSE）</strong>官方公開 API，無需授權金鑰</li>
               <li>每日台股收盤後自動更新（台灣時間凌晨 2:00 執行）</li>
-              <li>資料包含：收盤價、本益比（PE Ratio）、殖利率（Dividend Yield）</li>
+              <li>
+                資料包含：
+                <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
+                  <li>收盤價、本益比（PE Ratio）、殖利率（Dividend Yield）— BWIBBU_d</li>
+                  <li>除權息日、除權息前收盤價、權值+息值 — TWT49U</li>
+                  <li>個股日收盤價（用於計算填息天數）— STOCK_DAY</li>
+                  <li>上市公司產業別（TWSE 33 大產業分類）— OpenAPI t187ap03_L</li>
+                </ul>
+              </li>
             </ul>
           </Section>
 
           <Section title="二、篩選條件">
+            <p className="text-gray-700 text-sm mb-3 leading-relaxed">
+              目標：<strong>幫小資族挑出可以自組 ETF 長期持有的零股</strong>，因此不只看殖利率高低，更重視配息穩定度與產業分散。
+            </p>
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>股價 <strong>10～500 元</strong>（適合零股小額投資）</li>
               <li>本益比 <strong>大於 0</strong>（排除虧損股）</li>
-              <li>殖利率 <strong>大於 0</strong>（有過去配息紀錄）</li>
+              <li>殖利率 <strong>大於 0</strong> 且 ≤ 30%（過大者通常為資料錯位）</li>
               <li><strong>近 3 年每年至少配息一次</strong>（排除不穩定配息股）</li>
+              <li>
+                <strong>配息金額穩定度 CV ≤ 0.4</strong>：將近 3 年每年配發金額（權值+息值）加總後計算變異係數，過大者剔除 —
+                直接打掉<strong>一次性高配發的景氣循環股</strong>（例如營建股結案大筆配息）
+              </li>
+              <li>
+                <strong>產業分散：每個產業最多 3 檔送進 AI</strong>（依 TWSE 33 大產業別分類），避免單一產業過度集中
+              </li>
               <li><strong>近 3 年至少成功填息 1 次</strong>（排除長期無法填息的股票）</li>
               <li>排除 ETF 及特殊商品（專注一般上市個股）</li>
-              <li>從符合條件的股票中依殖利率由高到低排序，取前 <strong>50 檔</strong>送入 AI 分析</li>
+              <li className="text-gray-500">
+                整體流程：殖利率排序 → 年年配息 + CV 過濾 → 產業 cap → 填息計算 → 最多保留 <strong>50 檔</strong>送入 AI 分析
+              </li>
             </ul>
           </Section>
 
           <Section title="三、AI 分析">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
-              <li>由 <strong>Claude AI（Anthropic）</strong>從 50 檔候選名單中選出 10 檔</li>
+              <li>由 <strong>Claude AI（Anthropic）</strong>從 50 檔候選名單中選出 10 檔，組成<strong>產業分散、配息穩定</strong>的長期投資組合</li>
               <li>
-                考量因素：
-                <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
-                  <li>殖利率穩定性</li>
-                  <li>本益比合理性</li>
-                  <li>產業分散度</li>
-                  <li>股價親民度（適合零股小額累積）</li>
-                  <li>填息速度與填息率（參考近 3 年 TWSE 除權息與日收盤資料計算）</li>
-                </ul>
+                考量因素（按重要性排序）：
+                <ol className="list-decimal list-inside ml-5 mt-1 space-y-1">
+                  <li><strong>配息穩定度</strong>（dividend_cv，越低越好，&lt;0.2 為非常穩定）</li>
+                  <li><strong>產業分散度</strong>（盡量涵蓋 6 個以上不同產業）</li>
+                  <li><strong>填息速度與填息率</strong>（avg_fill_days 越小、fill_rate 越高越佳）</li>
+                  <li><strong>殖利率與本益比合理性</strong>（殖利率 &gt;8% 視為隱含風險訊號，不再是越高越好）</li>
+                  <li><strong>股價親民度</strong>（適合零股小額累積）</li>
+                </ol>
               </li>
               <li>每檔股票附上繁體中文推薦理由（50 字以內）</li>
               <li>
@@ -56,16 +76,15 @@ export default function About() {
 
           <Section title="四、限制與風險">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
-              <li>僅分析<strong>當日資料快照</strong>，未考慮歷史趨勢與股價走勢</li>
+              <li>僅分析<strong>當日資料快照</strong>，未考慮歷史股價走勢與總報酬</li>
               <li>殖利率為<strong>過去配息資料</strong>，不保證未來實際配息金額或比率</li>
-              <li>未考慮負債比率、現金流、營收成長等財務健康指標</li>
+              <li>未考慮負債比率、現金流、營收成長、ROE 等財務健康指標</li>
               <li>
-                <strong>產業集中風險</strong>：篩選第一步依殖利率由高到低排序，名單容易集中在營造、金融等高殖利率的
-                <strong>景氣循環股</strong>，AI 雖會參考產業分散度，但不保證涵蓋所有產業，使用者需自行評估組合分散度
+                <strong>景氣循環股陷阱</strong>：CV 過濾已能擋掉一次性大筆配息，但若一檔股票連續 3 年都配同樣金額仍可能是循環高峰，
+                <strong>使用者仍需自行判斷</strong>
               </li>
               <li>
-                <strong>景氣循環股陷阱</strong>：營造、航運等產業獲利波動大，過去高殖利率常是獲利高峰年的結果，
-                <strong>不代表未來可持續配息</strong>
+                <strong>產業別缺漏</strong>：少數新上市公司可能未及時收錄產業別，會以「未分類」處理
               </li>
               <li>AI 分析結果每日不同，不具一致性，不構成持續性投資建議</li>
               <li className="text-red-500 font-medium">本平台資訊僅供參考，不構成任何投資建議，投資人須自行評估風險，本平台不負任何投資損失責任。</li>
