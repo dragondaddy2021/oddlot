@@ -1,12 +1,12 @@
 name: Backtest Selection Algorithm
 
 on:
-  workflow_dispatch:        # 僅手動觸發（耗時 3-4 小時）
+  workflow_dispatch:        # 僅手動觸發（完整跑耗時 3-4 小時）
 
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 360    # 6 小時上限
+    timeout-minutes: 360
 
     steps:
       - name: Checkout
@@ -24,6 +24,16 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python backend/scripts/backtest.py
+
+      # 兩個 artifact：picks JSON 保 90 天（要重算 returns 時下載到本機跑 --recompute）；
+      # report markdown 保 30 天供下載閱讀
+      - name: Upload picks JSON
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backtest-picks
+          path: backend/scripts/backtest_picks.json
+          retention-days: 90
 
       - name: Upload report
         if: always()
