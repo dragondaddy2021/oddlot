@@ -61,6 +61,9 @@ export default function About() {
               </li>
               <li>每檔股票附上繁體中文推薦理由（50 字以內）</li>
               <li>
+                股票卡片代號旁顯示<strong>產業類別標籤</strong>，方便快速判斷組合的產業分散度
+              </li>
+              <li>
                 股票卡片會顯示兩項填息指標：
                 <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
                   <li><strong>填息速度</strong>：近 3 年已填息事件的平均天數（越短越佳）</li>
