@@ -6,7 +6,9 @@ on:
 jobs:
   backtest:
     runs-on: ubuntu-latest
-    timeout-minutes: 360
+    timeout-minutes: 600    # 3 年（36 snapshots × ~15 min）約需 9 小時
+    permissions:
+      contents: write       # 用於把 picks JSON commit 回 repo（支援跨 run 續跑）
 
     steps:
       - name: Checkout
@@ -25,7 +27,22 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: python backend/scripts/backtest.py
 
-      # 兩個 artifact：picks JSON 保 90 天（要重算 returns 時下載到本機跑 --recompute）；
+      # 把 picks JSON commit 回 repo —— 跨 run 續跑機制：若這次因 timeout 中斷，
+      # 下次手動觸發時 backtest.py 會自動 skip 已完成的 snapshot
+      - name: Commit picks JSON for resume
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add backend/scripts/backtest_picks.json || true
+          if git diff --cached --quiet; then
+            echo "No new picks to commit"
+          else
+            git commit -m "chore: backtest picks snapshot from run ${{ github.run_id }} [skip ci]"
+            git push
+          fi
+
+      # Artifact：picks JSON 保 90 天（本機用 --recompute 換指標時下載用）；
       # report markdown 保 30 天供下載閱讀
       - name: Upload picks JSON
         if: always()

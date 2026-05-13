@@ -36,7 +36,7 @@ from daily_selection import (
 # ── 回測參數 ──
 BENCHMARK_PRIMARY   = "0056"   # 元大高股息 — 風格貼近 oddlot 演算法
 BENCHMARK_SECONDARY = "0050"   # 元大台灣50 — 大盤代表（含 split adjustment）
-SNAPSHOT_COUNT      = 12       # 過去 12 個月，每月 1 個 snapshot
+SNAPSHOT_COUNT      = 36       # 過去 36 個月（3 年），跨多個市況
 SNAPSHOT_STRIDE     = 30       # 兩個 snapshot 之間相隔 N 天
 HOLD_END            = date.today()
 
@@ -47,7 +47,9 @@ RESULTS_MD          = Path(__file__).parent / "backtest_results.md"
 # 格式：{symbol: [(split_date, ratio), ...]}
 # 1:N split → 拆股當天 N 股取代 1 股，每股價變為原 1/N
 SPLIT_EVENTS: dict[str, list[tuple[date, int]]] = {
-    "0050": [(date(2025, 6, 23), 4)],
+    # 元大台灣50 在 2025-06-11~6/17 停牌進行 1:4 分割，6/18 首日復牌
+    # split_date 設為首日復牌日 → 邏輯：「start_date < split_date <= end_date」時應用 factor
+    "0050": [(date(2025, 6, 18), 4)],
 }
 
 
