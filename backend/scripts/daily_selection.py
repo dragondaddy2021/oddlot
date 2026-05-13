@@ -14,6 +14,7 @@ Required environment variables:
 """
 import json
 import os
+import random
 import re
 import sys
 import time
@@ -393,6 +394,45 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
 
 # ── Stage 3: Claude Haiku ──────────────────────────────────────────────────────
 
+# Anthropic 偶爾會在尖峰時段回傳 529 overloaded — 用指數退避重試蓋過短暫過載
+CLAUDE_OVERLOAD_RETRIES = 5
+CLAUDE_BACKOFF_BASE = 8.0   # 8s, 16s, 32s, 64s, 128s（含 jitter，最長約 2 分鐘）
+
+
+def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
+    """Call messages.create, retrying on 529/429/5xx with exponential backoff."""
+    for attempt in range(CLAUDE_OVERLOAD_RETRIES):
+        try:
+            return client.messages.create(
+                model=AI_MODEL,
+                max_tokens=2000,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+        except anthropic.APIStatusError as exc:
+            status = getattr(exc, "status_code", None)
+            retryable = status in (429, 529) or (status is not None and 500 <= status < 600)
+            if not retryable or attempt == CLAUDE_OVERLOAD_RETRIES - 1:
+                raise
+            delay = CLAUDE_BACKOFF_BASE * (2 ** attempt) + random.uniform(0, 2)
+            print(
+                f"[Claude] status {status} (attempt {attempt+1}/{CLAUDE_OVERLOAD_RETRIES}) — "
+                f"retrying in {delay:.1f}s",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+        except (anthropic.APIConnectionError, anthropic.APITimeoutError) as exc:
+            if attempt == CLAUDE_OVERLOAD_RETRIES - 1:
+                raise
+            delay = CLAUDE_BACKOFF_BASE * (2 ** attempt) + random.uniform(0, 2)
+            print(
+                f"[Claude] {type(exc).__name__} (attempt {attempt+1}/{CLAUDE_OVERLOAD_RETRIES}) — "
+                f"retrying in {delay:.1f}s",
+                file=sys.stderr,
+            )
+            time.sleep(delay)
+
+
 def call_claude(candidates: list[dict]) -> list[dict]:
     user_msg = (
         "候選股票清單（含過去 3 年填息資料）：\n"
@@ -408,12 +448,7 @@ def call_claude(candidates: list[dict]) -> list[dict]:
     client = anthropic.Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
     for attempt in range(2):
-        msg = client.messages.create(
-            model=AI_MODEL,
-            max_tokens=2000,
-            system=SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": user_msg}],
-        )
+        msg = _claude_create_with_retry(client, user_msg)
         raw = _strip_code_fence(msg.content[0].text)
         try:
             result = json.loads(raw)
