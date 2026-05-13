@@ -205,11 +205,15 @@ def _extract_json(text: str) -> str:
 
 # ── Stage 1: TWSE BWIBBU_d ─────────────────────────────────────────────────────
 
-def fetch_candidates() -> list[dict]:
-    """Return all valid BWIBBU_d candidates sorted by yield (no top slicing)."""
+def fetch_candidates(as_of_date: date | None = None) -> list[dict]:
+    """Return all valid BWIBBU_d candidates sorted by yield (no top slicing).
+
+    `as_of_date` lets backtest replay the algorithm at past dates; defaults to today.
+    """
+    base = as_of_date or date.today()
     with httpx.Client(timeout=20, follow_redirects=True, headers=TWSE_HEADERS) as client:
         for days_back in range(7):
-            d = (date.today() - timedelta(days=days_back)).strftime("%Y%m%d")
+            d = (base - timedelta(days=days_back)).strftime("%Y%m%d")
             try:
                 resp = client.get(
                     TWSE_BWIBBU,
@@ -279,13 +283,18 @@ def fetch_candidates() -> list[dict]:
 
 # ── Stage 2: TWT49U + STOCK_DAY → dividend filter & fill-days stats ───────────
 
-def _fetch_dividend_events(client: httpx.Client, years: int) -> dict[str, list[dict]]:
+def _fetch_dividend_events(
+    client: httpx.Client,
+    years: int,
+    as_of_date: date | None = None,
+) -> dict[str, list[dict]]:
     """Fetch ex-dividend events for past `years` calendar years via TWT49U.
 
     Returns {symbol: [{ex_date, baseline, year}, ...]}.
+    `as_of_date` defaults to today; backtest passes a past date to replay history.
     """
-    today = date.today()
-    target_years = list(range(today.year - years, today.year))
+    base = as_of_date or date.today()
+    target_years = list(range(base.year - years, base.year))
     events: dict[str, list[dict]] = {}
 
     for y in target_years:
@@ -487,10 +496,11 @@ def _historical_close(
     symbol: str,
     months_back: int,
     cache: dict,
+    as_of_date: date | None = None,
 ) -> float | None:
     """Return earliest available close price from `months_back` months ago,
     or None if STOCK_DAY has no data for that month."""
-    target = date.today().replace(day=1)
+    target = (as_of_date or date.today()).replace(day=1)
     for _ in range(months_back):
         target = (
             date(target.year - 1, 12, 1)
@@ -508,21 +518,25 @@ def _compute_price_cagr(
     current_price: float,
     cache: dict,
     years: int,
+    as_of_date: date | None = None,
 ) -> float | None:
-    """3 年股價 CAGR = (現價 / N 年前同月收盤) ^ (1/N) - 1。
+    """N 年股價 CAGR = (現價 / N 年前同月收盤) ^ (1/N) - 1。
 
     回傳 None 代表資料缺漏（例如新上市或 TWSE 暫無回應）— 上層應保留該股，
-    避免因資料異常誤殺。
+    避免因資料異常誤殺。`as_of_date` 讓回測能用過去某天作為「現價」基準。
     """
     if current_price <= 0:
         return None
-    past_close = _historical_close(client, symbol, years * 12, cache)
+    past_close = _historical_close(client, symbol, years * 12, cache, as_of_date)
     if past_close is None or past_close <= 0:
         return None
     return (current_price / past_close) ** (1 / years) - 1
 
 
-def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
+def enrich_with_dividend_stats(
+    raw: list[dict],
+    as_of_date: date | None = None,
+) -> list[dict]:
     """Filter & enrich candidates for the self-assembled-ETF use case.
 
     Pipeline:
@@ -534,15 +548,16 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
 
     Adds fields: dividend_cv, industry, price_cagr_3y, avg_fill_days,
                  fill_rate, fill_samples, last_ex_date.
+    `as_of_date` defaults to today; backtest passes a past date.
     """
-    current_year = date.today().year
-    target_years = set(range(current_year - DIVIDEND_YEARS, current_year))
+    base = as_of_date or date.today()
+    target_years = set(range(base.year - DIVIDEND_YEARS, base.year))
 
     sectors = _load_sectors()
 
     with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True, headers=TWSE_HEADERS) as client:
         print(f"[Dividend] fetching TWT49U for years {sorted(target_years)}...")
-        events_map = _fetch_dividend_events(client, DIVIDEND_YEARS)
+        events_map = _fetch_dividend_events(client, DIVIDEND_YEARS, as_of_date=base)
         print(f"[Dividend] {len(events_map)} stocks have ex-dividend records in that window")
 
         # ── Stage A: 年年配息 + CV 穩定度 ─────────────────────────────────────
@@ -581,7 +596,10 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
         healthy: list[dict] = []
         cagr_dropped = cagr_missing = 0
         for c in diversified:
-            cagr = _compute_price_cagr(client, c["symbol"], c["price"], cache, CAGR_LOOKBACK_YEARS)
+            cagr = _compute_price_cagr(
+                client, c["symbol"], c["price"], cache, CAGR_LOOKBACK_YEARS,
+                as_of_date=base,
+            )
             if cagr is None:
                 cagr_missing += 1
                 c["price_cagr_3y"] = None
