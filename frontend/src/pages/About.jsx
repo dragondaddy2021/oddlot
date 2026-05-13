@@ -38,10 +38,14 @@ export default function About() {
               <li>
                 <strong>產業分散：每個產業最多 3 檔送進 AI</strong>（依 TWSE 33 大產業別分類），避免單一產業過度集中
               </li>
+              <li>
+                <strong>近 3 年股價 CAGR ≥ -5%/年</strong>：用 STOCK_DAY 取 3 年前同月收盤對比現價計算年複合成長率，過低者剔除 —
+                <strong>擋價值陷阱</strong>（年年配 6% 但股價 3 年跌 30% 的長期賠錢股）。資料缺漏時保留，避免誤殺
+              </li>
               <li><strong>近 3 年至少成功填息 1 次</strong>（排除長期無法填息的股票）</li>
               <li>排除 ETF 及特殊商品（專注一般上市個股）</li>
               <li className="text-gray-500">
-                整體流程：殖利率排序 → 年年配息 + CV 過濾 → 產業 cap → 填息計算 → 最多保留 <strong>50 檔</strong>送入 AI 分析
+                整體流程：殖利率排序 → 年年配息 + CV 過濾 → 產業 cap → CAGR 過濾 → 填息計算 → 最多保留 <strong>50 檔</strong>送入 AI 分析
               </li>
             </ul>
           </Section>
@@ -54,6 +58,7 @@ export default function About() {
                 <ol className="list-decimal list-inside ml-5 mt-1 space-y-1">
                   <li><strong>配息穩定度</strong>（dividend_cv，越低越好，&lt;0.2 為非常穩定）</li>
                   <li><strong>產業分散度</strong>（盡量涵蓋 6 個以上不同產業）</li>
+                  <li><strong>股價長期趨勢</strong>（price_cagr_3y，&gt;0 為佳；負值代表填息也賠錢的價值陷阱風險）</li>
                   <li><strong>填息速度與填息率</strong>（avg_fill_days 越小、fill_rate 越高越佳）</li>
                   <li><strong>殖利率與本益比合理性</strong>（殖利率 &gt;8% 視為隱含風險訊號，不再是越高越好）</li>
                   <li><strong>股價親民度</strong>（適合零股小額累積）</li>
@@ -81,10 +86,13 @@ export default function About() {
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>僅分析<strong>當日資料快照</strong>，未考慮歷史股價走勢與總報酬</li>
               <li>殖利率為<strong>過去配息資料</strong>，不保證未來實際配息金額或比率</li>
-              <li>未考慮負債比率、現金流、營收成長、ROE 等財務健康指標</li>
+              <li>未考慮負債比率、現金流、營收成長、ROE 與 EPS／payout ratio 等財務健康指標</li>
               <li>
                 <strong>景氣循環股陷阱</strong>：CV 過濾已能擋掉一次性大筆配息，但若一檔股票連續 3 年都配同樣金額仍可能是循環高峰，
                 <strong>使用者仍需自行判斷</strong>
+              </li>
+              <li>
+                <strong>CAGR 為價格走勢</strong>：未含現金股利再投入，僅反映股價走勢；長期持有實際總報酬會略高於顯示值
               </li>
               <li>
                 <strong>產業別缺漏</strong>：少數新上市公司可能未及時收錄產業別，會以「未分類」處理

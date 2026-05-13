@@ -112,20 +112,24 @@ SECTOR_CACHE      = CACHE_DIR / "sectors.json"
 SECTOR_CACHE_DAYS = 7
 
 # ── 自組 ETF 篩選參數 ──
-DIVIDEND_CV_MAX = 0.4   # 近 N 年配息金額變異係數上限（剔除一次性高配發 / 景氣循環）
-SECTOR_CAP      = 3     # 每個產業最多送進 AI 的檔數
+DIVIDEND_CV_MAX     = 0.4    # 近 N 年配息金額變異係數上限（剔除一次性高配發 / 景氣循環）
+SECTOR_CAP          = 3      # 每個產業最多送進 AI 的檔數
+PRICE_CAGR_MIN      = -0.05  # 近 N 年股價 CAGR 下限（擋價值陷阱：年年配息但股價長期下跌）
+CAGR_LOOKBACK_YEARS = 3
 
 SYSTEM_PROMPT = (
     "你是台股零股投資分析助理，協助小資族挑選適合長期持有、自組 ETF 的個股。"
     "以下資料僅供參考，不構成投資建議，投資人須自行評估風險。"
-    "請從候選清單中選出 10 檔組成一個產業分散、配息穩定的長期投資組合。"
+    "請從候選清單中選出 10 檔組成一個產業分散、配息穩定、長期向上的投資組合。"
     "考量因素（按重要性排序）："
     "(1) 配息穩定度 dividend_cv（越低越好，<0.2 為非常穩定）；"
     "(2) 產業分散度 industry（避免同產業集中，盡量涵蓋 6 個以上不同產業）；"
-    "(3) 填息速度與填息率（avg_fill_days 越小、fill_rate 越高越佳）；"
-    "(4) 殖利率與本益比合理性（高殖利率不是首要目標，>8% 通常隱含風險）；"
-    "(5) 股價親民度。"
-    "注意：fill_samples < 2 時該指標參考性降低，勿過度依賴。"
+    "(3) 股價長期趨勢 price_cagr_3y（>0 為佳；負值代表填息也賠錢的價值陷阱風險）；"
+    "(4) 填息速度與填息率（avg_fill_days 越小、fill_rate 越高越佳）；"
+    "(5) 殖利率與本益比合理性（高殖利率不是首要目標，>8% 通常隱含風險）；"
+    "(6) 股價親民度。"
+    "注意：fill_samples < 2 時該指標參考性降低；price_cagr_3y 為 null 代表資料缺漏，"
+    "不影響評分但應於理由中註明。"
 )
 
 
@@ -439,6 +443,46 @@ def _apply_sector_cap(
     return out
 
 
+def _historical_close(
+    client: httpx.Client,
+    symbol: str,
+    months_back: int,
+    cache: dict,
+) -> float | None:
+    """Return earliest available close price from `months_back` months ago,
+    or None if STOCK_DAY has no data for that month."""
+    target = date.today().replace(day=1)
+    for _ in range(months_back):
+        target = (
+            date(target.year - 1, 12, 1)
+            if target.month == 1
+            else date(target.year, target.month - 1, 1)
+        )
+    yyyymm = f"{target.year}{target.month:02d}"
+    daily = _fetch_stock_month(client, symbol, yyyymm, cache)
+    return daily[0][1] if daily else None
+
+
+def _compute_price_cagr(
+    client: httpx.Client,
+    symbol: str,
+    current_price: float,
+    cache: dict,
+    years: int,
+) -> float | None:
+    """3 年股價 CAGR = (現價 / N 年前同月收盤) ^ (1/N) - 1。
+
+    回傳 None 代表資料缺漏（例如新上市或 TWSE 暫無回應）— 上層應保留該股，
+    避免因資料異常誤殺。
+    """
+    if current_price <= 0:
+        return None
+    past_close = _historical_close(client, symbol, years * 12, cache)
+    if past_close is None or past_close <= 0:
+        return None
+    return (current_price / past_close) ** (1 / years) - 1
+
+
 def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
     """Filter & enrich candidates for the self-assembled-ETF use case.
 
@@ -446,10 +490,11 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
       1. 年年配息（近 N 年每年至少 1 次除息）
       2. 配息穩定度 CV ≤ DIVIDEND_CV_MAX（剔除一次性高配發 / 景氣循環）
       3. 產業分散：每個 industry 最多 SECTOR_CAP 檔
-      4. 至少成功填息 1 次（近 N 年內）
+      4. 股價 N 年 CAGR ≥ PRICE_CAGR_MIN（擋價值陷阱）
+      5. 至少成功填息 1 次（近 N 年內）
 
-    Adds fields: dividend_cv, industry, avg_fill_days, fill_rate, fill_samples,
-                 last_ex_date.
+    Adds fields: dividend_cv, industry, price_cagr_3y, avg_fill_days,
+                 fill_rate, fill_samples, last_ex_date.
     """
     current_year = date.today().year
     target_years = set(range(current_year - DIVIDEND_YEARS, current_year))
@@ -491,11 +536,32 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
             f"{len(industry_breakdown)} industries)"
         )
 
-        # ── Stage C: fill 計算（限制 FILL_CHECK_POOL 避免 TWSE 請求爆量） ────
-        pool = diversified[:FILL_CHECK_POOL]
+        # ── Stage C: 股價 3 年 CAGR 過濾（擋價值陷阱） ──────────────────────
+        cache: dict = {}
+        print(f"[CAGR] computing {CAGR_LOOKBACK_YEARS}y price CAGR for {len(diversified)} stocks...")
+        healthy: list[dict] = []
+        cagr_dropped = cagr_missing = 0
+        for c in diversified:
+            cagr = _compute_price_cagr(client, c["symbol"], c["price"], cache, CAGR_LOOKBACK_YEARS)
+            if cagr is None:
+                cagr_missing += 1
+                c["price_cagr_3y"] = None
+                healthy.append(c)  # 資料缺漏時保留，避免誤殺
+                continue
+            if cagr < PRICE_CAGR_MIN:
+                cagr_dropped += 1
+                continue
+            c["price_cagr_3y"] = round(cagr, 3)
+            healthy.append(c)
+        print(
+            f"[CAGR] {len(healthy)}/{len(diversified)} pass CAGR ≥ {PRICE_CAGR_MIN:+.0%}/yr "
+            f"(dropped: trap={cagr_dropped}, missing_data={cagr_missing} kept)"
+        )
+
+        # ── Stage D: fill 計算（限制 FILL_CHECK_POOL 避免 TWSE 請求爆量） ────
+        pool = healthy[:FILL_CHECK_POOL]
         print(f"[Dividend] computing fill-days for {len(pool)} stocks (pool={FILL_CHECK_POOL})...")
 
-        cache: dict = {}
         for idx, c in enumerate(pool, 1):
             events = [e for e in events_map.get(c["symbol"], []) if e["year"] in target_years]
             fill_list: list[int] = []
@@ -512,7 +578,7 @@ def enrich_with_dividend_stats(raw: list[dict]) -> list[dict]:
             if idx % 10 == 0:
                 print(f"[Dividend] progress {idx}/{len(pool)}")
 
-        # ── Stage D: 至少成功填息 1 次 ──────────────────────────────────────
+        # ── Stage E: 至少成功填息 1 次 ──────────────────────────────────────
         filled = [c for c in pool if c["fill_samples"] > 0]
         print(f"[Dividend] {len(filled)}/{len(pool)} have ≥1 successful fill")
 
@@ -565,13 +631,13 @@ def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
 
 def call_claude(candidates: list[dict]) -> list[dict]:
     user_msg = (
-        "候選股票清單（含過去 3 年填息資料、配息穩定度、產業別）：\n"
+        "候選股票清單（含過去 3 年填息資料、配息穩定度、產業別、股價 CAGR）：\n"
         + json.dumps(candidates, ensure_ascii=False, indent=2)
         + "\n\n"
         "請回傳純 JSON（不含 markdown code block），格式如下：\n"
         '{"picks": [{"symbol": "2330", "name": "台積電", "reason": "50字以內繁中推薦理由",'
         ' "yield_rate": 2.5, "pe_ratio": 18.2, "price": 850.0,'
-        ' "industry": "半導體", "dividend_cv": 0.15,'
+        ' "industry": "半導體", "dividend_cv": 0.15, "price_cagr_3y": 0.12,'
         ' "avg_fill_days": 30.5, "fill_rate": 1.0, "fill_samples": 3,'
         ' "last_ex_date": "2025-07-15"}]}'
     )
@@ -680,10 +746,12 @@ def main() -> None:
         )
         cv = p.get("dividend_cv")
         cv_info = f"cv={cv}" if cv is not None else "cv=N/A"
+        cagr = p.get("price_cagr_3y")
+        cagr_info = f"cagr={cagr*100:+.1f}%/y" if cagr is not None else "cagr=N/A"
         industry = p.get("industry", "?")
         print(
             f"  {p['symbol']} {p['name']} [{industry}]  yield={p['yield_rate']}%  "
-            f"PE={p['pe_ratio']}  ${p['price']}  {cv_info}  {fill_info}"
+            f"PE={p['pe_ratio']}  ${p['price']}  {cv_info}  {cagr_info}  {fill_info}"
         )
 
 
