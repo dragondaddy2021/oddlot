@@ -39,6 +39,14 @@ BENCHMARK_SECONDARY = "0050"   # 元大台灣50 — 大盤代表（含 split adj
 SNAPSHOT_COUNT      = 36       # 過去 36 個月（3 年），跨多個市況
 SNAPSHOT_STRIDE     = 30       # 兩個 snapshot 之間相隔 N 天
 
+# 多時間窗口報酬：(label, days)。None = 持有至 HOLD_END（最長持有）
+RETURN_WINDOWS = [
+    ("3M",     90),
+    ("6M",     180),
+    ("12M",    365),
+    ("to_end", None),
+]
+
 # 跨 run 續跑（GitHub Actions 6 小時硬上限）：保留 ~20 分鐘給 commit/upload 步驟
 COLLECT_BUDGET_SEC  = 5 * 3600 + 40 * 60   # 5h 40min
 
@@ -230,6 +238,23 @@ def collect_picks() -> dict[str, list[dict]]:
 
 # ── Phase 2: Analyze returns + write report ────────────────────────────────────
 
+def _window_end(snap: date, window_days: int | None) -> date:
+    """Determine end date for a given holding window. None = HOLD_END."""
+    if window_days is None:
+        return HOLD_END
+    return min(snap + timedelta(days=window_days), HOLD_END)
+
+
+def _avg_return(client, picks, snap, end, cache):
+    """Mean of pick returns over [snap, end]; None if no valid picks."""
+    rs = []
+    for p in picks:
+        r = _holding_return(client, p["symbol"], snap, end, cache)
+        if r is not None:
+            rs.append(r)
+    return sum(rs) / len(rs) if rs else None
+
+
 def analyze() -> None:
     if not PICKS_JSON.exists():
         print(f"[Backtest] {PICKS_JSON} not found — run collect first", file=sys.stderr)
@@ -242,36 +267,43 @@ def analyze() -> None:
     results: list[dict] = []
 
     with httpx.Client(timeout=TWSE_TIMEOUT, follow_redirects=True, headers=TWSE_HEADERS) as client:
-        # Benchmark caches — fetch once
         for snap in snapshots:
             picks = all_picks.get(snap.isoformat()) or []
+            row: dict = {"date": snap, "picks": picks, "windows": {}, "to_end_returns": []}
 
-            # Per-pick returns
-            returns: list[tuple[str, str, float | None]] = []
-            for p in picks:
-                r = _holding_return(client, p["symbol"], snap, HOLD_END, cache)
-                returns.append((p["symbol"], p.get("name", "?"), r))
-            valid = [r for _, _, r in returns if r is not None]
-            avg = sum(valid) / len(valid) if valid else None
+            # 計算每個時間窗口
+            for label, days in RETURN_WINDOWS:
+                end = _window_end(snap, days)
+                # snapshot 太新 → 該窗口尚未滿，標記 N/A
+                if end <= snap:
+                    row["windows"][label] = {"oddlot": None, "primary": None, "secondary": None, "end": end}
+                    continue
+                oddlot_avg = _avg_return(client, picks, snap, end, cache)
+                bp = _holding_return(client, BENCHMARK_PRIMARY, snap, end, cache)
+                bs = _holding_return(client, BENCHMARK_SECONDARY, snap, end, cache)
+                row["windows"][label] = {
+                    "oddlot": oddlot_avg, "primary": bp, "secondary": bs, "end": end,
+                }
 
-            # Benchmarks
-            b1 = _holding_return(client, BENCHMARK_PRIMARY, snap, HOLD_END, cache)
-            b2 = _holding_return(client, BENCHMARK_SECONDARY, snap, HOLD_END, cache)
+                # to_end window: also save per-pick returns for detailed table
+                if days is None:
+                    pick_returns = []
+                    for p in picks:
+                        r = _holding_return(client, p["symbol"], snap, end, cache)
+                        pick_returns.append((p["symbol"], p.get("name", "?"), r))
+                    row["to_end_returns"] = pick_returns
 
-            results.append({
-                "date": snap,
-                "picks": picks,
-                "returns": returns,
-                "avg": avg,
-                "benchmark_primary": b1,
-                "benchmark_secondary": b2,
-            })
+            results.append(row)
 
             def fmt(x):
                 return f"{x*100:+.2f}%" if x is not None else "N/A"
-            print(f"[Backtest] {snap}: oddlot={fmt(avg)}  "
-                  f"{BENCHMARK_PRIMARY}={fmt(b1)}  "
-                  f"{BENCHMARK_SECONDARY}={fmt(b2)}", flush=True)
+            w6 = row["windows"]["6M"]
+            w_end = row["windows"]["to_end"]
+            print(
+                f"[Backtest] {snap}: 6M oddlot={fmt(w6['oddlot'])} {BENCHMARK_PRIMARY}={fmt(w6['primary'])}; "
+                f"to_end oddlot={fmt(w_end['oddlot'])} {BENCHMARK_PRIMARY}={fmt(w_end['primary'])}",
+                flush=True,
+            )
 
     write_report(results)
 
@@ -285,15 +317,12 @@ def write_report(results: list[dict]) -> None:
         f"- 主要基準：**{BENCHMARK_PRIMARY}**（元大高股息，風格貼近 oddlot 演算法）",
         f"- 次要基準：{BENCHMARK_SECONDARY}（元大台灣50，大盤代表）",
         f"- Snapshot 間隔：{SNAPSHOT_STRIDE} 天 × {SNAPSHOT_COUNT} 次",
+        f"- 報酬窗口：{', '.join(label for label, _ in RETURN_WINDOWS)}",
         "",
         "> 注意：本回測**只計算價格報酬**，不含現金股利再投入。實際長期持有總報酬會略高於本表，",
         "> 但相對比較（vs 0056 / 0050）仍公平 — 三者皆用相同方式計算。",
-        "> 已處理 0050 在 2025-06-23 的 1:4 拆股。",
+        "> 已處理 0050 在 2025-06-18 的 1:4 拆股。",
         "",
-        "## Per-Snapshot Results",
-        "",
-        f"| Snapshot | oddlot 平均 | {BENCHMARK_PRIMARY} | vs {BENCHMARK_PRIMARY} | {BENCHMARK_SECONDARY} | vs {BENCHMARK_SECONDARY} | 持有天 |",
-        "|---|---|---|---|---|---|---|",
     ]
 
     def fmt_pct(x):
@@ -306,50 +335,61 @@ def write_report(results: list[dict]) -> None:
         flag = "🟢" if d > 0 else "🔴" if d < 0 else "⚪"
         return f"{flag} {d*100:+.2f}%"
 
-    for r in results:
-        days = (HOLD_END - r["date"]).days
+    # ── Aggregate by window ───────────────────────────────────────────────────
+    lines += ["## Aggregate（按時間窗口分）", ""]
+    lines += [
+        f"| 窗口 | 有效 snaps | oddlot 平均 | {BENCHMARK_PRIMARY} 平均 | 超額 | 勝率 vs {BENCHMARK_PRIMARY} | {BENCHMARK_SECONDARY} 平均 | 勝率 vs {BENCHMARK_SECONDARY} |",
+        "|---|---|---|---|---|---|---|---|",
+    ]
+    for label, _ in RETURN_WINDOWS:
+        valid_p = [
+            r for r in results
+            if r["windows"][label]["oddlot"] is not None
+            and r["windows"][label]["primary"] is not None
+        ]
+        valid_s = [
+            r for r in results
+            if r["windows"][label]["oddlot"] is not None
+            and r["windows"][label]["secondary"] is not None
+        ]
+        if not valid_p:
+            lines.append(f"| {label} | 0 | — | — | — | — | — | — |")
+            continue
+        avg_o  = sum(r["windows"][label]["oddlot"] for r in valid_p) / len(valid_p)
+        avg_bp = sum(r["windows"][label]["primary"] for r in valid_p) / len(valid_p)
+        wins_p = sum(1 for r in valid_p if r["windows"][label]["oddlot"] > r["windows"][label]["primary"])
+        if valid_s:
+            avg_bs = sum(r["windows"][label]["secondary"] for r in valid_s) / len(valid_s)
+            wins_s = sum(1 for r in valid_s if r["windows"][label]["oddlot"] > r["windows"][label]["secondary"])
+            bs_str = fmt_pct(avg_bs)
+            wins_s_str = f"{wins_s}/{len(valid_s)} ({wins_s/len(valid_s)*100:.0f}%)"
+        else:
+            bs_str = "—"
+            wins_s_str = "—"
         lines.append(
-            f"| {r['date']} | {fmt_pct(r['avg'])} | "
-            f"{fmt_pct(r['benchmark_primary'])} | "
-            f"{diff_flag(r['avg'], r['benchmark_primary'])} | "
-            f"{fmt_pct(r['benchmark_secondary'])} | "
-            f"{diff_flag(r['avg'], r['benchmark_secondary'])} | {days} |"
+            f"| **{label}** | {len(valid_p)} | {fmt_pct(avg_o)} | {fmt_pct(avg_bp)} | "
+            f"{(avg_o - avg_bp)*100:+.2f}% | {wins_p}/{len(valid_p)} ({wins_p/len(valid_p)*100:.0f}%) | "
+            f"{bs_str} | {wins_s_str} |"
         )
 
-    # Aggregate
-    valid_p = [r for r in results if r["avg"] is not None and r["benchmark_primary"] is not None]
-    valid_s = [r for r in results if r["avg"] is not None and r["benchmark_secondary"] is not None]
-
-    lines += ["", "## Aggregate"]
-    if valid_p:
-        avg_o = sum(r["avg"] for r in valid_p) / len(valid_p)
-        avg_b = sum(r["benchmark_primary"] for r in valid_p) / len(valid_p)
-        wins  = sum(1 for r in valid_p if r["avg"] > r["benchmark_primary"])
+    # ── Per-snapshot table per window ─────────────────────────────────────────
+    for label, days in RETURN_WINDOWS:
+        lines += ["", f"## Per-Snapshot：{label} 報酬窗口", ""]
         lines += [
-            "",
-            f"### vs {BENCHMARK_PRIMARY} (主要基準, {len(valid_p)} 個有效 snapshot)",
-            "",
-            f"- **oddlot 平均報酬**：{avg_o*100:+.2f}%",
-            f"- **{BENCHMARK_PRIMARY} 平均報酬**：{avg_b*100:+.2f}%",
-            f"- **平均超額報酬**：{(avg_o - avg_b)*100:+.2f}%",
-            f"- **勝率**：{wins}/{len(valid_p)} ({wins/len(valid_p)*100:.0f}%)",
+            f"| Snapshot | oddlot | {BENCHMARK_PRIMARY} | vs | {BENCHMARK_SECONDARY} | vs | 窗口結束 |",
+            "|---|---|---|---|---|---|---|",
         ]
-    if valid_s:
-        avg_o = sum(r["avg"] for r in valid_s) / len(valid_s)
-        avg_b = sum(r["benchmark_secondary"] for r in valid_s) / len(valid_s)
-        wins  = sum(1 for r in valid_s if r["avg"] > r["benchmark_secondary"])
-        lines += [
-            "",
-            f"### vs {BENCHMARK_SECONDARY} (次要基準, {len(valid_s)} 個有效 snapshot)",
-            "",
-            f"- **oddlot 平均報酬**：{avg_o*100:+.2f}%",
-            f"- **{BENCHMARK_SECONDARY} 平均報酬**：{avg_b*100:+.2f}%",
-            f"- **平均超額報酬**：{(avg_o - avg_b)*100:+.2f}%",
-            f"- **勝率**：{wins}/{len(valid_s)} ({wins/len(valid_s)*100:.0f}%)",
-        ]
+        for r in results:
+            w = r["windows"][label]
+            lines.append(
+                f"| {r['date']} | {fmt_pct(w['oddlot'])} | "
+                f"{fmt_pct(w['primary'])} | {diff_flag(w['oddlot'], w['primary'])} | "
+                f"{fmt_pct(w['secondary'])} | {diff_flag(w['oddlot'], w['secondary'])} | "
+                f"{w['end']} |"
+            )
 
-    # Per-snapshot pick details
-    lines += ["", "## 各 snapshot 詳細選股"]
+    # ── Per-snapshot pick details (using to_end window) ───────────────────────
+    lines += ["", "## 各 snapshot 詳細選股（to_end 窗口報酬）"]
     for r in results:
         days = (HOLD_END - r["date"]).days
         lines += ["", f"### {r['date']} (持有 {days} 天)"]
@@ -358,17 +398,19 @@ def write_report(results: list[dict]) -> None:
             continue
         lines += [
             "",
-            "| 代號 | 名稱 | 產業 | 殖利率 | CAGR/yr | 報酬 |",
-            "|---|---|---|---|---|---|",
+            "| 代號 | 名稱 | 產業 | 殖利率 | CAGR/yr | 動能 3M | 報酬 |",
+            "|---|---|---|---|---|---|---|",
         ]
-        ret_map = {sym: ret for sym, _, ret in r["returns"]}
+        ret_map = {sym: ret for sym, _, ret in r.get("to_end_returns", [])}
         for p in r["picks"]:
             ret = ret_map.get(p["symbol"])
             cagr = p.get("price_cagr_3y")
             cagr_str = f"{cagr*100:+.1f}%" if cagr is not None else "—"
+            mom = p.get("momentum_3m")
+            mom_str = f"{mom*100:+.1f}%" if mom is not None else "—"
             lines.append(
                 f"| {p['symbol']} | {p.get('name','?')} | {p.get('industry','?')} | "
-                f"{p.get('yield_rate','?')}% | {cagr_str} | {fmt_pct(ret)} |"
+                f"{p.get('yield_rate','?')}% | {cagr_str} | {mom_str} | {fmt_pct(ret)} |"
             )
 
     RESULTS_MD.write_text("\n".join(lines), encoding="utf-8")
