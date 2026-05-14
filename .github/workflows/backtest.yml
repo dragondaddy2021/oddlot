@@ -39,7 +39,9 @@ jobs:
             echo "No new picks to commit"
           else
             git commit -m "chore: backtest picks snapshot from run ${{ github.run_id }} [skip ci]"
-            git push
+            # 拉一次最新 main 再 push，避免被同期 commit 卡到
+            git pull --rebase origin main || true
+            git push origin HEAD:main
           fi
 
       # Artifact：picks JSON 保 90 天（本機用 --recompute 換指標時下載用）；

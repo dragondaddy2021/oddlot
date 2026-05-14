@@ -38,10 +38,32 @@ BENCHMARK_PRIMARY   = "0056"   # 元大高股息 — 風格貼近 oddlot 演算�
 BENCHMARK_SECONDARY = "0050"   # 元大台灣50 — 大盤代表（含 split adjustment）
 SNAPSHOT_COUNT      = 36       # 過去 36 個月（3 年），跨多個市況
 SNAPSHOT_STRIDE     = 30       # 兩個 snapshot 之間相隔 N 天
-HOLD_END            = date.today()
+
+# 跨 run 續跑（GitHub Actions 6 小時硬上限）：保留 ~20 分鐘給 commit/upload 步驟
+COLLECT_BUDGET_SEC  = 5 * 3600 + 40 * 60   # 5h 40min
 
 PICKS_JSON          = Path(__file__).parent / "backtest_picks.json"
 RESULTS_MD          = Path(__file__).parent / "backtest_results.md"
+
+
+def _resolve_hold_end() -> date:
+    """HOLD_END 自動推斷：若已有 picks JSON，取最新 snapshot + STRIDE 為錨點，
+    保證跨 run 報酬計算終點一致；若無，預設為今天。
+    """
+    if PICKS_JSON.exists():
+        try:
+            data = json.loads(PICKS_JSON.read_text(encoding="utf-8"))
+            keys = sorted(data.keys())
+            if keys:
+                latest = date.fromisoformat(keys[-1])
+                inferred = latest + timedelta(days=SNAPSHOT_STRIDE)
+                return min(inferred, date.today())
+        except Exception:
+            pass
+    return date.today()
+
+
+HOLD_END = _resolve_hold_end()
 
 # 已知 ETF / 股票拆股事件：raw STOCK_DAY 不調整歷史價，需手動補
 # 格式：{symbol: [(split_date, ratio), ...]}
@@ -159,7 +181,11 @@ def run_snapshot(snapshot_date: date) -> list[dict]:
 
 
 def collect_picks() -> dict[str, list[dict]]:
-    """Run pipeline for each snapshot and persist to PICKS_JSON."""
+    """Run pipeline for each snapshot and persist to PICKS_JSON.
+
+    Bails gracefully when COLLECT_BUDGET_SEC is reached so the workflow can
+    commit progress and re-run later (續跑機制依賴 PICKS_JSON 內已有的 keys）.
+    """
     snapshots = [
         HOLD_END - timedelta(days=SNAPSHOT_STRIDE * i)
         for i in range(SNAPSHOT_COUNT, 0, -1)
@@ -174,11 +200,22 @@ def collect_picks() -> dict[str, list[dict]]:
         except Exception:
             existing = {}
 
+    start_ts = time.time()
     for snap in snapshots:
         key = snap.isoformat()
         if key in existing and existing[key]:
             print(f"[Backtest] skipping {key} (already collected)")
             continue
+
+        elapsed = time.time() - start_ts
+        if elapsed > COLLECT_BUDGET_SEC:
+            print(
+                f"[Backtest] time budget reached ({elapsed/60:.1f} min) — "
+                f"stopping collect; trigger workflow again to resume",
+                file=sys.stderr,
+            )
+            break
+
         picks = run_snapshot(snap)
         existing[key] = picks
         # Save after each snapshot for resume safety
@@ -187,7 +224,7 @@ def collect_picks() -> dict[str, list[dict]]:
             encoding="utf-8",
         )
 
-    print(f"\n[Backtest] picks saved to {PICKS_JSON}")
+    print(f"\n[Backtest] picks saved to {PICKS_JSON} ({len(existing)} snapshots total)")
     return existing
 
 
