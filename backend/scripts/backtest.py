@@ -47,8 +47,10 @@ RETURN_WINDOWS = [
     ("to_end", None),
 ]
 
-# 跨 run 續跑（GitHub Actions 6 小時硬上限）：保留 ~20 分鐘給 commit/upload 步驟
-COLLECT_BUDGET_SEC  = 5 * 3600 + 40 * 60   # 5h 40min
+# 跨 run 續跑（GitHub Actions 6 小時硬上限）：留 ~1 小時給 analyze + commit/upload，
+# 避免 collect 吃掉太多時間導致整個 job 被強殺、commit 步驟跑不到。
+# 注意：當 collect 不滿 SNAPSHOT_COUNT 時，main() 會自動 skip analyze。
+COLLECT_BUDGET_SEC  = 5 * 3600              # 5h
 
 PICKS_JSON          = Path(__file__).parent / "backtest_picks.json"
 META_JSON           = Path(__file__).parent / "backtest_picks_meta.json"
@@ -467,6 +469,16 @@ def main() -> None:
         collect_picks()
 
     if not args.collect_only:
+        # 只在 collect 完整收滿時才 analyze；partial 跑 analyze 沒意義且會吃掉
+        # commit 步驟的時間（6h 硬上限會強殺 job，導致已收的 picks 丟失）
+        if PICKS_JSON.exists():
+            data = json.loads(PICKS_JSON.read_text(encoding="utf-8"))
+            if len(data) < SNAPSHOT_COUNT:
+                print(
+                    f"[Backtest] collected {len(data)}/{SNAPSHOT_COUNT} snapshots — "
+                    f"skipping analyze (re-trigger workflow to continue)"
+                )
+                return
         analyze()
 
 
