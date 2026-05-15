@@ -458,7 +458,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"=== oddlot backtest ===")
+    print("=== oddlot backtest ===")
     print(f"Snapshots: {SNAPSHOT_COUNT} (every {SNAPSHOT_STRIDE} days)")
     print(f"Hold end:  {HOLD_END}")
     print(f"Benchmarks: {BENCHMARK_PRIMARY} (primary), {BENCHMARK_SECONDARY} (secondary)")
