@@ -51,24 +51,49 @@ RETURN_WINDOWS = [
 COLLECT_BUDGET_SEC  = 5 * 3600 + 40 * 60   # 5h 40min
 
 PICKS_JSON          = Path(__file__).parent / "backtest_picks.json"
+META_JSON           = Path(__file__).parent / "backtest_picks_meta.json"
 RESULTS_MD          = Path(__file__).parent / "backtest_results.md"
 
 
+def _write_meta(hold_end: date) -> None:
+    try:
+        META_JSON.write_text(
+            json.dumps({"hold_end": hold_end.isoformat()}, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
 def _resolve_hold_end() -> date:
-    """HOLD_END 自動推斷：若已有 picks JSON，取最新 snapshot + STRIDE 為錨點，
-    保證跨 run 報酬計算終點一致；若無，預設為今天。
+    """HOLD_END 解析（依優先序）：
+      1. META_JSON 存在 → 讀取 pinned 值（跨 run 一致的唯一可靠來源）
+      2. PICKS_JSON 已滿 36 個 → legacy 反推 latest+STRIDE，並補寫 META_JSON
+         （這條只對「修 bug 前完整收完的 JSON」有效；部分收集會錯）
+      3. 全新 batch → 錨定 today 並寫 META_JSON
+    刪 META_JSON（連同 PICKS_JSON）= 重啟新窗口。
     """
+    if META_JSON.exists():
+        try:
+            meta = json.loads(META_JSON.read_text(encoding="utf-8"))
+            return date.fromisoformat(meta["hold_end"])
+        except Exception:
+            pass
+
     if PICKS_JSON.exists():
         try:
             data = json.loads(PICKS_JSON.read_text(encoding="utf-8"))
-            keys = sorted(data.keys())
-            if keys:
-                latest = date.fromisoformat(keys[-1])
-                inferred = latest + timedelta(days=SNAPSHOT_STRIDE)
-                return min(inferred, date.today())
+            if len(data) == SNAPSHOT_COUNT:
+                latest = max(date.fromisoformat(k) for k in data)
+                resolved = latest + timedelta(days=SNAPSHOT_STRIDE)
+                _write_meta(resolved)
+                return resolved
         except Exception:
             pass
-    return date.today()
+
+    today = date.today()
+    _write_meta(today)
+    return today
 
 
 HOLD_END = _resolve_hold_end()
