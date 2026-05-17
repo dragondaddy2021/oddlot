@@ -225,6 +225,40 @@ def _extract_json(text: str) -> str:
     return text[start:]  # unbalanced — let json.loads raise
 
 
+def _escape_unescaped_lf(raw: str) -> str:
+    """Escape raw LF/CR inside JSON string literals to \\n / \\r.
+
+    Claude 偶爾在 string value 內塞真實換行字元（特別是被要求輸出多段文字時），
+    違反 JSON spec 導致 json.loads 抛 'Unterminated string'。這個函式用狀態機
+    走過 raw text，只在 string literal 內把 LF/CR 替成 escape 序列，不影響其他
+    結構字元。
+    """
+    out: list[str] = []
+    in_string = False
+    escape = False
+    for ch in raw:
+        if escape:
+            escape = False
+            out.append(ch)
+            continue
+        if ch == "\\":
+            escape = True
+            out.append(ch)
+            continue
+        if ch == '"':
+            in_string = not in_string
+            out.append(ch)
+            continue
+        if in_string and ch == "\n":
+            out.append("\\n")
+            continue
+        if in_string and ch == "\r":
+            out.append("\\r")
+            continue
+        out.append(ch)
+    return "".join(out)
+
+
 # ── Stage 1: TWSE BWIBBU_d ─────────────────────────────────────────────────────
 
 def fetch_candidates(as_of_date: date | None = None) -> list[dict]:
@@ -781,7 +815,7 @@ def call_claude(candidates: list[dict]) -> list[dict]:
     for attempt in range(2):
         msg = _claude_create_with_retry(client, user_msg)
         original = msg.content[0].text if msg.content else ""
-        raw = _extract_json(original)
+        raw = _escape_unescaped_lf(_extract_json(original))
         try:
             result = json.loads(raw)
             picks = result.get("picks", [])
