@@ -6,11 +6,11 @@ name: TWSE Endpoint Watchdog
 
 on:
   schedule:
-    - cron: "5 * * * *"   # 每小時的第 5 分鐘（避開整點 GitHub 高峰）
+    - cron: "5 * * * *"
   workflow_dispatch:
 
 permissions:
-  issues: write           # 開 issue 用
+  issues: write
   contents: read
 
 jobs:
@@ -20,7 +20,6 @@ jobs:
       - name: Check TWSE BWIBBU_d
         id: probe
         run: |
-          # 用昨天的日期當測試，今天可能還沒收盤
           DATE=$(date -u -d "1 day ago" +%Y%m%d)
           URL="https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&date=${DATE}&selectType=ALL"
           STATUS=$(curl -sf -o /tmp/body -w "%{http_code}" -A "Mozilla/5.0" -H "Referer: https://www.twse.com.tw/" "$URL" || echo "fail")
@@ -37,35 +36,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # 已有同 label 的 open issue 就 skip，避免每小時都開新 issue
           EXISTING=$(gh issue list --label twse-recovered --state open --limit 1 --json number --jq '.[].number')
           if [ -n "$EXISTING" ]; then
             echo "Issue #$EXISTING already open, skipping"
             exit 0
           fi
-          # 確保 label 存在（第一次跑時自動建）
           gh label create twse-recovered --color 0e8a16 --description "TWSE 端點恢復通知" 2>/dev/null || true
           gh issue create \
-            --title "🟢 TWSE 主端點已恢復 — 可重啟 daily cron" \
+            --title "TWSE 主端點已恢復 — 可重啟 daily cron" \
             --label twse-recovered \
-            --body "$(cat <<'BODY'
-TWSE \`www.twse.com.tw/exchangeReport/BWIBBU_d\` 已重新回應 200。
-
-## 要做的事
-
-1. 編輯 \`.github/workflows/daily_recommend.yml\`，反註解 \`schedule:\` 區塊：
-   \`\`\`yaml
-   schedule:
-     - cron: "0 18 * * *"   # 台灣時間凌晨 02:00（主要）
-     - cron: "0 20 * * *"   # 台灣時間凌晨 04:00（備援）
-   \`\`\`
-
-2. 手動觸發一次 daily_recommend 驗證有跑通
-
-3. 順便評估要不要把 backtest 也補跑（取得 2024-10 → 2026 的真實表現）
-
-## 確認後
-
-關掉這個 issue，watchdog 下次又掛時會自動再開新的。
-BODY
-)"
+            --body "TWSE BWIBBU_d 已重新回應 200。請反註解 .github/workflows/daily_recommend.yml 的 schedule 區塊，手動觸發一次 Daily AI Stock Selection 驗證，視情況補跑 backtest。確認後關掉這個 issue，watchdog 下次再掛時會自動再開新的。"
