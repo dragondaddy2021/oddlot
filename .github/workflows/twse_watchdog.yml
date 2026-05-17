@@ -20,11 +20,20 @@ jobs:
       - name: Check TWSE BWIBBU_d
         id: probe
         run: |
-          DATE=$(date -u -d "1 day ago" +%Y%m%d)
+          # 4 天前必為交易日（無論今天星期幾，往前推 4 天必跨過週末），避免週末/假日 NoData
+          DATE=$(date -u -d "4 days ago" +%Y%m%d)
           URL="https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&date=${DATE}&selectType=ALL"
-          STATUS=$(curl -sf -o /tmp/body -w "%{http_code}" -A "Mozilla/5.0" -H "Referer: https://www.twse.com.tw/" "$URL" || echo "fail")
-          SIZE=$(wc -c < /tmp/body 2>/dev/null || echo 0)
-          echo "Status: $STATUS, Size: $SIZE bytes"
+          # Retry 3 次抓 transient 連線錯誤（curl 000fail 之類）
+          for attempt in 1 2 3; do
+            STATUS=$(curl -s -o /tmp/body -w "%{http_code}" \
+              -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" \
+              -H "Referer: https://www.twse.com.tw/" \
+              --max-time 15 "$URL" || echo "000")
+            SIZE=$(wc -c < /tmp/body 2>/dev/null || echo 0)
+            echo "[attempt $attempt] Date=$DATE Status=$STATUS Size=$SIZE"
+            [ "$STATUS" = "200" ] && [ "$SIZE" -gt 1000 ] && break
+            sleep 5
+          done
           if [ "$STATUS" = "200" ] && [ "$SIZE" -gt 1000 ]; then
             echo "result=up" >> $GITHUB_OUTPUT
           else

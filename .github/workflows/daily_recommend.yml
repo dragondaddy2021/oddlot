@@ -1,14 +1,10 @@
 name: Daily AI Stock Selection
 
 on:
-  # TWSE 主要 endpoint（www.twse.com.tw/exchangeReport/*）2026-05-17 起 404 全掛
-  # 包含 BWIBBU_d / TWT49U / STOCK_DAY，無法計算 CV / momentum / CAGR
-  # 只用 OpenAPI 會降級到「純殖利率排序」(已知系統性輸 0056)
-  # 暫停 cron 直到 TWSE 恢復或改用替代資料源
-  # schedule:
-  #   - cron: "0 18 * * *"   # 台灣時間凌晨 02:00（主要）
-  #   - cron: "0 20 * * *"   # 台灣時間凌晨 04:00（備援）
-  workflow_dispatch:        # 手動觸發（保留供測試用）
+  schedule:
+    - cron: "0 18 * * *"   # 台灣時間凌晨 02:00（主要）
+    - cron: "0 20 * * *"   # 台灣時間凌晨 04:00（備援）
+  workflow_dispatch:        # 手動觸發
 
 jobs:
   select-stocks:
