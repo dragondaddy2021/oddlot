@@ -763,7 +763,9 @@ def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
         try:
             return client.messages.create(
                 model=AI_MODEL,
-                max_tokens=4000,
+                # 4 段 reason × 10 picks 在 4000 tokens 內會被截斷導致 unterminated string
+                # JSON parse fail。8000 給足夠 headroom，Haiku 成本影響 < $0.01/call
+                max_tokens=8000,
                 system=SYSTEM_PROMPT,
                 messages=[{"role": "user", "content": user_msg}],
             )
@@ -822,9 +824,17 @@ def call_claude(candidates: list[dict]) -> list[dict]:
             print(f"[Claude] {len(picks)} picks returned")
             return picks
         except json.JSONDecodeError as exc:
-            print(f"[Claude] JSON parse error (attempt {attempt+1}/2): {exc}", file=sys.stderr)
+            stop = getattr(msg, "stop_reason", "?")
+            usage = getattr(msg, "usage", None)
+            out_tok = getattr(usage, "output_tokens", "?") if usage else "?"
+            print(
+                f"[Claude] JSON parse error (attempt {attempt+1}/2): {exc} "
+                f"[stop_reason={stop} output_tokens={out_tok}]",
+                file=sys.stderr,
+            )
             print(f"[Claude] raw response (first 300 chars): {original[:300]!r}", file=sys.stderr)
             print(f"[Claude] extracted (first 300 chars): {raw[:300]!r}", file=sys.stderr)
+            print(f"[Claude] raw response (last 300 chars): {original[-300:]!r}", file=sys.stderr)
 
     raise RuntimeError("Claude returned invalid JSON after 2 attempts")
 
