@@ -203,8 +203,8 @@ function StockCard({ stock, onAddFavorite, adding, isLoggedIn }) {
         </span>
       </p>
 
-      {/* AI reason */}
-      <p className="text-gray-600 text-sm leading-relaxed flex-1">
+      {/* AI reason — 4 段結構（持有邏輯 / 組合角色 / 風險 / 近況脈絡），用空行分隔 */}
+      <p className="text-gray-600 text-sm leading-relaxed flex-1 whitespace-pre-line">
         {stock.reason}
       </p>
 
