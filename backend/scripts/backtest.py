@@ -469,11 +469,13 @@ def main() -> None:
         collect_picks()
 
     if not args.collect_only:
-        # 只在 collect 完整收滿時才 analyze；partial 跑 analyze 沒意義且會吃掉
-        # commit 步驟的時間（6h 硬上限會強殺 job，導致已收的 picks 丟失）
+        # 只在 collect 收到 SNAPSHOT_COUNT-1 以上時才 analyze；少 1 個對 aggregate
+        # 影響微乎其微，但能避免最後一格剛好失敗時整個 batch 沒報告。
+        # 嚴重 partial（< SNAPSHOT_COUNT-1）跑 analyze 沒意義且會吃掉 commit 步驟
+        # 的時間（6h 硬上限會強殺 job，導致已收的 picks 丟失）。
         if PICKS_JSON.exists():
             data = json.loads(PICKS_JSON.read_text(encoding="utf-8"))
-            if len(data) < SNAPSHOT_COUNT:
+            if len(data) < SNAPSHOT_COUNT - 1:
                 print(
                     f"[Backtest] collected {len(data)}/{SNAPSHOT_COUNT} snapshots — "
                     f"skipping analyze (re-trigger workflow to continue)"
