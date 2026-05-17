@@ -42,10 +42,15 @@ export default function About() {
                 <strong>近 3 年股價 CAGR ≥ -5%/年</strong>：用 STOCK_DAY 取 3 年前同月收盤對比現價計算年複合成長率，過低者剔除 —
                 <strong>擋價值陷阱</strong>（年年配 6% 但股價 3 年跌 30% 的長期賠錢股）。資料缺漏時保留，避免誤殺
               </li>
+              <li>
+                <strong>Momentum boost（近 3 個月漲跌幅排序強化）</strong>：對殖利率前 200 名計算近 3 月漲跌幅，
+                用「殖利率 + momentum × 100」重排序，讓強勢股優先進入產業 cap —
+                直擊 3 年回測證實的<strong>系統性錯過 AI/半導體強勢股</strong>問題
+              </li>
               <li><strong>近 3 年至少成功填息 1 次</strong>（排除長期無法填息的股票）</li>
               <li>排除 ETF 及特殊商品（專注一般上市個股）</li>
               <li className="text-gray-500">
-                整體流程：殖利率排序 → 年年配息 + CV 過濾 → 產業 cap → CAGR 過濾 → 填息計算 → 最多保留 <strong>50 檔</strong>送入 AI 分析
+                整體流程：殖利率排序 → 年年配息 + CV 過濾 → momentum boost → 產業 cap → CAGR 過濾 → 填息計算 → 最多保留 <strong>50 檔</strong>送入 AI 分析
               </li>
             </ul>
           </Section>
@@ -59,12 +64,21 @@ export default function About() {
                   <li><strong>配息穩定度</strong>（dividend_cv，越低越好，&lt;0.2 為非常穩定）</li>
                   <li><strong>產業分散度</strong>（盡量涵蓋 6 個以上不同產業）</li>
                   <li><strong>股價長期趨勢</strong>（price_cagr_3y，&gt;0 為佳；負值代表填息也賠錢的價值陷阱風險）</li>
+                  <li><strong>近期動能</strong>（momentum_3m，近 3 個月漲跌幅；&gt;0.05 強勢、&lt;-0.10 應警惕）</li>
                   <li><strong>填息速度與填息率</strong>（avg_fill_days 越小、fill_rate 越高越佳）</li>
                   <li><strong>殖利率與本益比合理性</strong>（殖利率 &gt;8% 視為隱含風險訊號，不再是越高越好）</li>
                   <li><strong>股價親民度</strong>（適合零股小額累積）</li>
                 </ol>
               </li>
-              <li>每檔股票附上繁體中文推薦理由（50 字以內）</li>
+              <li>
+                每檔股票附上繁體中文推薦理由，採 <strong>4 段固定結構</strong>：
+                <ul className="list-disc list-inside ml-5 mt-1 space-y-1">
+                  <li><strong>【持有邏輯】</strong>為什麼適合 5 年以上長期持有（連結商業模式 / 現金流特性）</li>
+                  <li><strong>【組合角色】</strong>在 10 檔組合中的定位（如：高股息穩定軸、防禦現金流、成長補位）</li>
+                  <li><strong>【風險】</strong>具體風險警示，不泛談「市場波動」</li>
+                  <li><strong>【近況脈絡】</strong>產業或公司近期狀況（AI 訓練知識內，避免捏造具體數字）</li>
+                </ul>
+              </li>
               <li>
                 股票卡片代號旁顯示<strong>產業類別標籤</strong>，方便快速判斷組合的產業分散度
               </li>
