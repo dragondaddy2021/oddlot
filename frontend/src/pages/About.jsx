@@ -96,7 +96,37 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="四、限制與風險">
+          <Section title="四、回測表現（誠實揭露）">
+            <p className="text-gray-700 text-sm mb-3 leading-relaxed">
+              用 3 年（2023-05 → 2026-01）逐月 snapshot 回測，**33 個有效樣本**，與被動式 ETF 比較<strong>價格報酬</strong>（不含現金股利再投入）：
+            </p>
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-gray-700 border border-gray-200 mb-3">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-2 py-1.5 text-left font-medium border border-gray-200">持有期</th>
+                    <th className="px-2 py-1.5 text-right font-medium border border-gray-200">oddlot 平均</th>
+                    <th className="px-2 py-1.5 text-center font-medium border border-gray-200">vs 0056（高股息）</th>
+                    <th className="px-2 py-1.5 text-center font-medium border border-gray-200">vs 0050（大盤）</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td className="px-2 py-1.5 border border-gray-200">3 個月</td><td className="px-2 py-1.5 text-right border border-gray-200">+3.02%</td><td className="px-2 py-1.5 text-center border border-gray-200">勝率 61%，超額 +1.15%</td><td className="px-2 py-1.5 text-center border border-gray-200 text-gray-500">勝率 30%，落後 -5.65%</td></tr>
+                  <tr><td className="px-2 py-1.5 border border-gray-200">6 個月</td><td className="px-2 py-1.5 text-right border border-gray-200">+6.50%</td><td className="px-2 py-1.5 text-center border border-gray-200">勝率 67%，超額 +1.95%</td><td className="px-2 py-1.5 text-center border border-gray-200 text-gray-500">勝率 27%，落後 -14.69%</td></tr>
+                  <tr><td className="px-2 py-1.5 border border-gray-200">12 個月</td><td className="px-2 py-1.5 text-right border border-gray-200">+10.13%</td><td className="px-2 py-1.5 text-center border border-gray-200">勝率 58%，超額 +1.46%</td><td className="px-2 py-1.5 text-center border border-gray-200 text-gray-500">勝率 9%，落後 -35.87%</td></tr>
+                  <tr><td className="px-2 py-1.5 border border-gray-200 font-medium">持有至今</td><td className="px-2 py-1.5 text-right border border-gray-200 font-medium">+22.63%</td><td className="px-2 py-1.5 text-center border border-gray-200"><strong>勝率 33%，平手 -0.34%</strong></td><td className="px-2 py-1.5 text-center border border-gray-200 text-gray-500">勝率 3%，大幅落後</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
+              <li><strong>vs 0056</strong>：短中期勝率約 6 成、超額報酬 +1～2%；長期持有則與 0056 平手。oddlot 的價值不在「打敗 0056」而是「可控的自組 ETF 體驗 + 跟 0056 差不多的表現」</li>
+              <li><strong>vs 0050</strong>：全期大幅落後，這預期之中 — oddlot 是高股息風格、0050 是大型權值股 ETF（台積電權重 50%），不該硬比</li>
+              <li><strong>限制：</strong>只計算<strong>價格報酬</strong>不含現金股利再投入（實際長期報酬會略高）；已處理 0050 在 2025-06-18 的 1:4 拆股；AI 選股有隨機性，重跑同一日結果未必完全一致</li>
+              <li className="text-orange-600">2025-Q2 之後 momentum 在恢復期表現轉弱，目前持續觀察中</li>
+            </ul>
+          </Section>
+
+          <Section title="五、限制與風險">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>僅分析<strong>當日資料快照</strong>，未考慮歷史股價走勢與總報酬</li>
               <li>殖利率為<strong>過去配息資料</strong>，不保證未來實際配息金額或比率</li>
@@ -116,7 +146,7 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="五、更新頻率">
+          <Section title="六、更新頻率">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>每日<strong>台灣時間凌晨 2:00</strong> 自動執行選股並更新資料</li>
               <li>非交易日（週末、國定假日）可能顯示前一個交易日的資料</li>
@@ -124,7 +154,7 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="六、會員功能">
+          <Section title="七、會員功能">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li><strong>我的最愛</strong>：收藏單檔股票，方便日後追蹤</li>
               <li><strong>我的 ETF</strong>：自組個人化投資組合，可從我的最愛挑選成分股並設定權重</li>
