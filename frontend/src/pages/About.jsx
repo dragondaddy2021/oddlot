@@ -2,7 +2,7 @@ export default function About() {
   return (
     <div className="min-h-screen bg-gray-50">
       <main className="max-w-3xl mx-auto px-4 py-10">
-        <h2 className="text-2xl font-bold text-gray-900 mb-8">關於 oddlot 選股邏輯</h2>
+        <h2 className="text-2xl font-bold text-gray-900 mb-8">關於 龍爹地的零股投資學習平台 選股邏輯</h2>
 
         <div className="space-y-8">
 
@@ -198,7 +198,7 @@ export default function About() {
             特別感謝選股邏輯檢視員：Wen Cheng 🐟
           </p>
           <p className="text-xs text-gray-400 mt-2">
-            © 2026 oddlot
+            © 2026 龍爹地的零股投資學習平台
           </p>
         </div>
       </main>

@@ -39,8 +39,8 @@ function Navbar() {
     <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
       <div className="max-w-7xl mx-auto px-4 py-2 sm:py-0 sm:h-14 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-2 gap-x-4">
         {/* Logo */}
-        <Link to="/" className="order-1 text-xl font-black text-blue-600 tracking-tight shrink-0">
-          oddlot
+        <Link to="/" className="order-1 text-base sm:text-lg font-black text-blue-600 tracking-tight shrink-0">
+          龍爹地的零股投資學習平台
         </Link>
 
         {/* Auth — mobile: same row as logo; desktop: far right */}

@@ -9,9 +9,9 @@ export default defineConfig({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico"],
       manifest: {
-        name: "oddlot - AI 台股零股選股",
-        short_name: "oddlot",
-        description: "AI 驅動的台股零股投資參考平台",
+        name: "龍爹地的零股投資學習平台",
+        short_name: "零股學習",
+        description: "AI 篩選 + 你掌控的自組 ETF — 台股零股長期投資學習平台",
         theme_color: "#2563eb",
         background_color: "#f9fafb",
         display: "standalone",

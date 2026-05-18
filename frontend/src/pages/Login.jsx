@@ -13,8 +13,8 @@ export default function Login() {
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-lg p-8 text-center">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">oddlot</h1>
-        <p className="text-gray-500 text-sm mb-8">台股零股智慧選股平台</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">龍爹地的零股投資學習平台</h1>
+        <p className="text-gray-500 text-sm mb-8">AI 篩選 + 你掌控的自組 ETF</p>
 
         <button
           disabled
