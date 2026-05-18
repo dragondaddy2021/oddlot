@@ -156,7 +156,7 @@ export default function Home() {
 
 function StockCard({ stock, onAddFavorite, adding, isLoggedIn }) {
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md transition-shadow">
+    <div className="bg-white rounded-2xl shadow-md border-2 border-gray-300 p-5 flex flex-col gap-3 hover:shadow-lg hover:border-blue-300 transition-all">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="min-w-0 flex-1">

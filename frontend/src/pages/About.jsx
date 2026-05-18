@@ -105,7 +105,7 @@ export default function About() {
                 <thead className="bg-gray-50">
                   <tr>
                     <th className="px-2 py-1.5 text-left font-medium border border-gray-200">持有期</th>
-                    <th className="px-2 py-1.5 text-right font-medium border border-gray-200">oddlot 平均</th>
+                    <th className="px-2 py-1.5 text-right font-medium border border-gray-200">本平台 平均</th>
                     <th className="px-2 py-1.5 text-center font-medium border border-gray-200">vs 0056（高股息）</th>
                     <th className="px-2 py-1.5 text-center font-medium border border-gray-200">vs 0050（大盤）</th>
                   </tr>
@@ -119,8 +119,8 @@ export default function About() {
               </table>
             </div>
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
-              <li><strong>vs 0056</strong>：短中期勝率約 6 成、超額報酬 +1～2%；長期持有則與 0056 平手。oddlot 的價值不在「打敗 0056」而是「可控的自組 ETF 體驗 + 跟 0056 差不多的表現」</li>
-              <li><strong>vs 0050</strong>：全期大幅落後，這預期之中 — oddlot 是高股息風格、0050 是大型權值股 ETF（台積電權重 50%），不該硬比</li>
+              <li><strong>vs 0056</strong>：短中期勝率約 6 成、超額報酬 +1～2%；長期持有則與 0056 平手。本平台 的價值不在「打敗 0056」而是「可控的自組 ETF 體驗 + 跟 0056 差不多的表現」</li>
+              <li><strong>vs 0050</strong>：全期大幅落後，這預期之中 — 本平台 是高股息風格、0050 是大型權值股 ETF（台積電權重 50%），不該硬比</li>
               <li><strong>限制：</strong>只計算<strong>價格報酬</strong>不含現金股利再投入（實際長期報酬會略高）；已處理 0050 在 2025-06-18 的 1:4 拆股；AI 選股有隨機性，重跑同一日結果未必完全一致</li>
               <li className="text-orange-600">2025-Q2 之後 momentum 在恢復期表現轉弱，目前持續觀察中</li>
             </ul>
@@ -128,7 +128,7 @@ export default function About() {
 
           <Section title="五、適合誰用 / 不適合誰用">
             <p className="text-gray-700 text-sm mb-3 leading-relaxed">
-              基於回測結果與定位，誠實告訴你 oddlot 適不適合：
+              基於回測結果與定位，誠實告訴你 本平台 適不適合：
             </p>
             <div className="space-y-3">
               <div className="border-l-4 border-green-500 pl-3 py-1">
@@ -142,14 +142,14 @@ export default function About() {
               <div className="border-l-4 border-orange-500 pl-3 py-1">
                 <p className="text-sm font-medium text-gray-800 mb-1">✗ 這種情況直接買 0056 更簡單</p>
                 <p className="text-gray-600 text-sm leading-relaxed">
-                  「只想領股息、不想動腦、不想每天看 app」的話 — <strong>直接買 0056（元大高股息）更省事</strong>。回測顯示 oddlot 長期報酬與 0056 接近（持有至今 -0.34% 平手），
-                  但 oddlot 需要自己操作零股買賣、自行管理 10 檔個股，沒有 ETF 自動再平衡。
+                  「只想領股息、不想動腦、不想每天看 app」的話 — <strong>直接買 0056（元大高股息）更省事</strong>。回測顯示 本平台 長期報酬與 0056 接近（持有至今 -0.34% 平手），
+                  但 本平台 需要自己操作零股買賣、自行管理 10 檔個股，沒有 ETF 自動再平衡。
                 </p>
               </div>
               <div className="border-l-4 border-gray-400 pl-3 py-1">
                 <p className="text-sm font-medium text-gray-800 mb-1">⚠ 不要期待</p>
                 <p className="text-gray-600 text-sm leading-relaxed">
-                  「AI 幫我贏大盤 / 賺更多」— 回測證實 oddlot vs 0050（大盤）全期落後，因為定位是高股息穩定軸，不是抓 AI / 半導體成長浪潮。
+                  「AI 幫我贏大盤 / 賺更多」— 回測證實 本平台 vs 0050（大盤）全期落後，因為定位是高股息穩定軸，不是抓 AI / 半導體成長浪潮。
                 </p>
               </div>
             </div>
