@@ -126,7 +126,36 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="五、限制與風險">
+          <Section title="五、適合誰用 / 不適合誰用">
+            <p className="text-gray-700 text-sm mb-3 leading-relaxed">
+              基於回測結果與定位，誠實告訴你 oddlot 適不適合：
+            </p>
+            <div className="space-y-3">
+              <div className="border-l-4 border-green-500 pl-3 py-1">
+                <p className="text-sm font-medium text-gray-800 mb-1">✓ 適合這三種人</p>
+                <ul className="list-disc list-inside space-y-1 text-gray-600 text-sm leading-relaxed">
+                  <li><strong>想學投資的小資族</strong> — 每天看 4 段選股理由（持有邏輯/組合角色/風險/近況脈絡），慢慢建立產業判斷力</li>
+                  <li><strong>每月小額零股累積者</strong>（如 1-3 千元/月） — 零股機制適合分批進場，10 檔組合每月買一兩檔逐步建立部位</li>
+                  <li><strong>想自己掌控組合的人</strong> — 透過「我的最愛」與「我的 ETF」客製成分股與權重，比直接買 ETF 多一層彈性</li>
+                </ul>
+              </div>
+              <div className="border-l-4 border-orange-500 pl-3 py-1">
+                <p className="text-sm font-medium text-gray-800 mb-1">✗ 這種情況直接買 0056 更簡單</p>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  「只想領股息、不想動腦、不想每天看 app」的話 — <strong>直接買 0056（元大高股息）更省事</strong>。回測顯示 oddlot 長期報酬與 0056 接近（持有至今 -0.34% 平手），
+                  但 oddlot 需要自己操作零股買賣、自行管理 10 檔個股，沒有 ETF 自動再平衡。
+                </p>
+              </div>
+              <div className="border-l-4 border-gray-400 pl-3 py-1">
+                <p className="text-sm font-medium text-gray-800 mb-1">⚠ 不要期待</p>
+                <p className="text-gray-600 text-sm leading-relaxed">
+                  「AI 幫我贏大盤 / 賺更多」— 回測證實 oddlot vs 0050（大盤）全期落後，因為定位是高股息穩定軸，不是抓 AI / 半導體成長浪潮。
+                </p>
+              </div>
+            </div>
+          </Section>
+
+          <Section title="六、限制與風險">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>僅分析<strong>當日資料快照</strong>，未考慮歷史股價走勢與總報酬</li>
               <li>殖利率為<strong>過去配息資料</strong>，不保證未來實際配息金額或比率</li>
@@ -146,7 +175,7 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="六、更新頻率">
+          <Section title="七、更新頻率">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li>每日<strong>台灣時間凌晨 2:00</strong> 自動執行選股並更新資料</li>
               <li>非交易日（週末、國定假日）可能顯示前一個交易日的資料</li>
@@ -154,7 +183,7 @@ export default function About() {
             </ul>
           </Section>
 
-          <Section title="七、會員功能">
+          <Section title="八、會員功能">
             <ul className="list-disc list-inside space-y-2 text-gray-600 text-sm leading-relaxed">
               <li><strong>我的最愛</strong>：收藏單檔股票，方便日後追蹤</li>
               <li><strong>我的 ETF</strong>：自組個人化投資組合，可從我的最愛挑選成分股並設定權重</li>
