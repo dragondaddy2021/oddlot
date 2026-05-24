@@ -112,6 +112,7 @@ SECTOR_CACHE      = CACHE_DIR / "sectors.json"
 SECTOR_CACHE_DAYS = 7
 
 # ── 自組 ETF 篩選參數 ──
+TARGET_PICKS        = 10     # 最終推薦檔數（前端卡片數 / API schema 都以此為準）
 DIVIDEND_CV_MAX     = 0.4    # 近 N 年配息金額變異係數上限（剔除一次性高配發 / 景氣循環）
 SECTOR_CAP          = 3      # 每個產業最多送進 AI 的檔數
 PRICE_CAGR_MIN      = -0.05  # 近 N 年股價 CAGR 下限（擋價值陷阱：年年配息但股價長期下跌）
@@ -822,6 +823,16 @@ def call_claude(candidates: list[dict]) -> list[dict]:
             result = json.loads(raw)
             picks = result.get("picks", [])
             print(f"[Claude] {len(picks)} picks returned")
+            # Claude 不保證遵守「選出 10 檔」— 強制收斂到 TARGET_PICKS。
+            # 多回傳就截掉尾端（picks 依組合偏好排序），少回傳則發出警告但放行
+            # （顯示 9 檔好過當日完全沒有推薦）。
+            if len(picks) != TARGET_PICKS:
+                print(
+                    f"[Claude] WARNING: expected {TARGET_PICKS} picks, got {len(picks)}"
+                    + ("; truncating to first 10" if len(picks) > TARGET_PICKS else ""),
+                    file=sys.stderr,
+                )
+                picks = picks[:TARGET_PICKS]
             return picks
         except json.JSONDecodeError as exc:
             stop = getattr(msg, "stop_reason", "?")
