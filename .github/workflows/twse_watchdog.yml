@@ -5,8 +5,10 @@ name: TWSE Endpoint Watchdog
 # 恢復後反註解 daily_recommend.yml 的 schedule 即可
 
 on:
-  schedule:
-    - cron: "5 * * * *"
+  # 2026-05-26 暫停：TWSE 已恢復，且 GitHub 帳號停權中導致 watchdog 開 issue 失敗
+  # 帳號恢復後可反註解 schedule 重啟（或視情況降頻）
+  # schedule:
+  #   - cron: "5 * * * *"
   workflow_dispatch:
 
 permissions:
