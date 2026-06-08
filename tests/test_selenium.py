@@ -20,10 +20,10 @@ def wait_for(driver, condition, timeout=WAIT):
 # ── Tests ──────────────────────────────────────────────────────────────────────
 
 def test_homepage_title(chrome_driver, base_url):
-    """Page title should contain 'oddlot' (case-insensitive)."""
+    """Page title should contain 龍爹地的零股投資學習平台."""
     chrome_driver.get(base_url + "/")
-    wait_for(chrome_driver, EC.title_contains("ddlot"))
-    assert "oddlot" in chrome_driver.title.lower()
+    wait_for(chrome_driver, EC.title_contains("零股投資學習平台"))
+    assert "零股投資學習平台" in chrome_driver.title
 
 
 def test_disclaimer_banner(chrome_driver, base_url):
