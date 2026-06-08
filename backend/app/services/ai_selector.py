@@ -8,6 +8,7 @@ Stages:
   3. Persist result to Supabase + Upstash Redis (TTL 24 h)
   4. On subsequent calls today, return the cached result immediately
 """
+import asyncio
 import json
 import logging
 from datetime import date, timedelta
@@ -82,18 +83,29 @@ async def _fetch_bwibbu(client: httpx.AsyncClient) -> list[dict]:
     """
     for days_back in range(7):
         d = (date.today() - timedelta(days=days_back)).strftime("%Y%m%d")
-        try:
-            resp = await client.get(
-                TWSE_BWIBBU,
-                params={"response": "json", "date": d, "selectType": "ALL"},
-            )
-            resp.raise_for_status()
-            body = resp.json()
-        except Exception as exc:
-            logger.debug("BWIBBU_d attempt %s failed: %s", d, exc)
-            continue
+        body = None
+        # TWSE 對雲端 IP 偶發回 307（無 Location）軟封鎖；sleep 30s 重試一次通常會過
+        for attempt in range(2):
+            try:
+                resp = await client.get(
+                    TWSE_BWIBBU,
+                    params={"response": "json", "date": d, "selectType": "ALL"},
+                )
+                resp.raise_for_status()
+                body = resp.json()
+                break
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code in (301, 302, 307, 308) and attempt == 0:
+                    logger.info("BWIBBU_d %s soft-blocked (%s); sleep 30s and retry", d, exc.response.status_code)
+                    await asyncio.sleep(30)
+                    continue
+                logger.debug("BWIBBU_d attempt %s failed: %s", d, exc)
+                break
+            except Exception as exc:
+                logger.debug("BWIBBU_d attempt %s failed: %s", d, exc)
+                break
 
-        if body.get("stat") == "OK" and body.get("data"):
+        if body and body.get("stat") == "OK" and body.get("data"):
             logger.info("BWIBBU_d: loaded %d rows for date %s", len(body["data"]), d)
             return body["data"]
 

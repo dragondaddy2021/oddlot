@@ -271,18 +271,29 @@ def fetch_candidates(as_of_date: date | None = None) -> list[dict]:
     with httpx.Client(timeout=20, follow_redirects=True, headers=TWSE_HEADERS) as client:
         for days_back in range(7):
             d = (base - timedelta(days=days_back)).strftime("%Y%m%d")
-            try:
-                resp = client.get(
-                    TWSE_BWIBBU,
-                    params={"response": "json", "date": d, "selectType": "ALL"},
-                )
-                resp.raise_for_status()
-                body = resp.json()
-            except Exception as exc:
-                print(f"[TWSE] attempt {d} failed: {exc}", file=sys.stderr)
-                continue
+            body = None
+            # TWSE 對雲端 IP 偶發回 307（無 Location）軟封鎖；sleep 30s 重試一次通常會過
+            for attempt in range(2):
+                try:
+                    resp = client.get(
+                        TWSE_BWIBBU,
+                        params={"response": "json", "date": d, "selectType": "ALL"},
+                    )
+                    resp.raise_for_status()
+                    body = resp.json()
+                    break
+                except httpx.HTTPStatusError as exc:
+                    if exc.response.status_code in (301, 302, 307, 308) and attempt == 0:
+                        print(f"[TWSE] {d} soft-blocked ({exc.response.status_code}); sleep 30s and retry", file=sys.stderr)
+                        time.sleep(30)
+                        continue
+                    print(f"[TWSE] attempt {d} failed: {exc}", file=sys.stderr)
+                    break
+                except Exception as exc:
+                    print(f"[TWSE] attempt {d} failed: {exc}", file=sys.stderr)
+                    break
 
-            if body.get("stat") == "OK" and body.get("data"):
+            if body and body.get("stat") == "OK" and body.get("data"):
                 rows = body["data"]
                 fields = body.get("fields", [])
                 print(f"[TWSE] loaded {len(rows)} rows for {d}")
