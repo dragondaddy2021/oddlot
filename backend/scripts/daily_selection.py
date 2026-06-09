@@ -26,9 +26,11 @@ import httpx
 from supabase import create_client
 
 # ── Constants ──────────────────────────────────────────────────────────────────
-TWSE_BWIBBU    = "https://www.twse.com.tw/exchangeReport/BWIBBU_d"
+TWSE_BWIBBU    = "https://www.twse.com.tw/rwd/zh/afterTrading/BWIBBU_d"
 TWSE_T49U      = "https://www.twse.com.tw/rwd/zh/exRight/TWT49U"
-TWSE_STOCK_DAY = "https://www.twse.com.tw/exchangeReport/STOCK_DAY"  # exchangeReport 路徑不擋雲端 IP（同 BWIBBU_d）
+TWSE_STOCK_DAY = "https://www.twse.com.tw/rwd/zh/afterTrading/STOCK_DAY"
+# 2026-06：舊 /exchangeReport/* 路徑對 GitHub Actions 雲端 IP 回 307（無 Location 軟封鎖），
+# 全改用新版 /rwd/* 路徑（回傳 schema 與舊版完全相同，TWT49U 早已用此路徑且未被擋）。
 
 # TWSE 部分端點（STOCK_DAY）會擋無 UA 或 python-httpx 的請求，改用瀏覽器 UA 繞過
 TWSE_HEADERS = {
