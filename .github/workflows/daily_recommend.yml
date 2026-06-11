@@ -2,8 +2,15 @@ name: Daily AI Stock Selection
 
 on:
   schedule:
-    - cron: "0 18 * * *"   # 台灣時間凌晨 02:00（主要）
-    - cron: "0 20 * * *"   # 台灣時間凌晨 04:00（備援）
+    # TWSE 對雲端 IP 的封鎖是間歇的（多為早班），一天多排幾班提高抓到「新」資料
+    # 的機率。already_exists 只認 fresh row：第一班抓到新就寫入，其餘班次自動 skip
+    # （不重打 Claude）；抓不到的班次走 carry-forward 維持綠燈，stale 不擋後班升級。
+    # 公開 repo，Actions 免費，多排無成本。cron 為 UTC，台灣 = UTC+8。
+    - cron: "0 18 * * *"   # 台灣 02:00
+    - cron: "0 20 * * *"   # 台灣 04:00
+    - cron: "0 0 * * *"    # 台灣 08:00
+    - cron: "0 4 * * *"    # 台灣 12:00
+    - cron: "0 8 * * *"    # 台灣 16:00
   workflow_dispatch:        # 手動觸發
 
 jobs:
