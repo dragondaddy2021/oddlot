@@ -995,7 +995,11 @@ def save_to_supabase(today: date, picks: list[dict], stale_from: str | None = No
 
 def _latest_stored_picks(today: date) -> tuple[str, list[dict]] | None:
     """Return (source_date, stocks) of the most recent stored recommendation
-    before today, or None if none exists."""
+    before today that has a full TARGET_PICKS slate, or None.
+
+    只沿用「真正 10 檔」的歷史 row — 避免把歷史殘留的 <10 檔壞資料（如本次
+    起因的 6 檔 row）複製到今天，反而打掛數量契約。
+    """
     url = os.environ["SUPABASE_URL"]
     key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     sb  = create_client(url, key)
@@ -1005,12 +1009,13 @@ def _latest_stored_picks(today: date) -> tuple[str, list[dict]] | None:
         .select("date, stocks")
         .lt("date", today.isoformat())
         .order("date", desc=True)
-        .limit(1)
+        .limit(30)
         .execute()
     )
-    if result.data:
-        row = result.data[0]
-        return row["date"], row.get("stocks") or []
+    for row in result.data or []:
+        stocks = row.get("stocks") or []
+        if len(stocks) == TARGET_PICKS:
+            return row["date"], stocks
     return None
 
 
