@@ -16,6 +16,9 @@ on:
 jobs:
   select-stocks:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write          # 連續 stale 太久時開 issue 通知
 
     steps:
       - name: Checkout
@@ -30,8 +33,30 @@ jobs:
         run: pip install anthropic httpx supabase pydantic-settings
 
       - name: Run daily selection
+        id: run
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
         run: python backend/scripts/daily_selection.py
+
+      # 連續 carry-forward ≥ STALE_ALERT_DAYS 天 → 開 issue（會 email）。
+      # idempotent：已有開著的 twse-stale issue 就不重開；TWSE 恢復後新班次寫 fresh
+      # 不再觸發，手動關掉即可，下次再卡會自動重開。開 issue 失敗不讓整個 run 變紅。
+      - name: Alert on prolonged staleness
+        if: steps.run.outputs.stale_alert == 'true'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          EXISTING=$(gh issue list --label twse-stale --state open --limit 1 --json number --jq '.[].number')
+          if [ -n "$EXISTING" ]; then
+            echo "Issue #$EXISTING already open, skipping"
+            exit 0
+          fi
+          gh label create twse-stale --color d93f0b --description "TWSE 連續抓不到、前端為舊資料" 2>/dev/null || true
+          gh issue create \
+            --title "oddlot 已連續 ${{ steps.run.outputs.stale_days }} 天 carry-forward（TWSE 抓不到、前端為舊資料）" \
+            --label twse-stale \
+            --body "daily 選股已連續 ${{ steps.run.outputs.stale_days }} 天靠 carry-forward 維持（最新沿用來源 ${{ steps.run.outputs.stale_src }}）。代表 TWSE 持續擋 GitHub Actions 雲端 IP，前端顯示的是舊推薦。請查 TWSE 連線；恢復後新班次會自動寫入 fresh、此 issue 可關閉（下次再卡會自動重開）。"

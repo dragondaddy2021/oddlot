@@ -1084,6 +1084,17 @@ def carry_forward_or_die(today: date, reason: str) -> None:
                 f"（TWSE 抓取持續失敗，前端為舊資料），請查 TWSE 連線"
             )
             print(f"[FALLBACK] STALE ALERT: {stale_days} consecutive carry-forward days", file=sys.stderr)
+            # 寫 step output 讓 workflow 開 GitHub issue（會 email），run summary 的
+            # ::warning:: 不會主動通知，靠這個確保「卡太久」一定收得到。
+            gh_out = os.environ.get("GITHUB_OUTPUT")
+            if gh_out:
+                try:
+                    with open(gh_out, "a", encoding="utf-8") as f:
+                        f.write("stale_alert=true\n")
+                        f.write(f"stale_days={stale_days}\n")
+                        f.write(f"stale_src={src_date}\n")
+                except Exception as exc:
+                    print(f"[FALLBACK] could not write GITHUB_OUTPUT: {exc}", file=sys.stderr)
     except Exception as exc:
         print(f"[FALLBACK] stale-day count failed: {exc}", file=sys.stderr)
 
