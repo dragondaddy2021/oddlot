@@ -51,6 +51,12 @@ FILL_MAX_MONTHS  = 3      # 除權息後最多往後看 N 個月找填息日
 TWSE_DELAY       = 0.7    # TWSE 兩次呼叫之間的延遲（秒），避免被擋
 TWSE_TIMEOUT     = 25
 
+# STOCK_DAY 軟封鎖斷路器：連續 N 次軟封鎖（中間無任何成功）即視為「全面封鎖」，
+# 之後直接放棄、不再 sleep 30s 重試，避免 TWSE 全面擋雲端 IP 時單次 run 被
+# 數十筆 × 30s 拖到數十分鐘。最壞額外耗時上限 ≈ TWSE_SOFTBLOCK_GIVEUP × 30s。
+TWSE_SOFTBLOCK_GIVEUP = 5
+_softblock_state = {"consecutive": 0, "tripped": False}
+
 COL_SYMBOL = 0
 COL_NAME   = 1
 COL_PRICE  = 2
@@ -432,22 +438,51 @@ def _fetch_stock_month(
         return cache[key]
 
     result: list[tuple[date, float]] = []
-    try:
-        resp = client.get(
-            TWSE_STOCK_DAY,
-            params={"response": "json", "date": f"{yyyymm}01", "stockNo": symbol},
-        )
-        resp.raise_for_status()
-        body = resp.json()
-    except Exception as exc:
-        print(f"[STOCK_DAY] {symbol} {yyyymm} failed: {exc}", file=sys.stderr)
-        cache[key] = result
-        time.sleep(TWSE_DELAY)
-        return result
+    body = None
+    # STOCK_DAY 與 BWIBBU/TWT49U 同源，對雲端 IP 一樣會回 307（無 Location）軟封鎖。
+    # 此處呼叫量大（每股每月一次），但軟封鎖時若直接吞掉會讓 fill_samples=0、整檔被
+    # Stage E 丟掉，把候選池打薄到 <10 檔 → 觸發回補。比照 BWIBBU sleep 30s 重試一次，
+    # 通常即可跨過封鎖窗口；仍失敗才放棄（回空、Stage E 自然剔除）。
+    for attempt in range(2):
+        try:
+            resp = client.get(
+                TWSE_STOCK_DAY,
+                params={"response": "json", "date": f"{yyyymm}01", "stockNo": symbol},
+            )
+            resp.raise_for_status()
+            body = resp.json()
+            _softblock_state["consecutive"] = 0   # 成功即重置連續計數（區分間歇 vs 全面）
+            break
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code in (301, 302, 307, 308) and attempt == 0:
+                _softblock_state["consecutive"] += 1
+                # 斷路器已跳脫，或這次達到門檻 → 不再 sleep，直接放棄
+                if _softblock_state["tripped"] or _softblock_state["consecutive"] >= TWSE_SOFTBLOCK_GIVEUP:
+                    if not _softblock_state["tripped"]:
+                        _softblock_state["tripped"] = True
+                        print(
+                            f"[STOCK_DAY] {TWSE_SOFTBLOCK_GIVEUP} consecutive soft-blocks — "
+                            f"circuit breaker tripped; skipping 30s retries for the rest of this run",
+                            file=sys.stderr,
+                        )
+                    print(f"[STOCK_DAY] {symbol} {yyyymm} soft-blocked ({exc.response.status_code}); breaker open, giving up", file=sys.stderr)
+                    break
+                print(
+                    f"[STOCK_DAY] {symbol} {yyyymm} soft-blocked ({exc.response.status_code}); "
+                    f"sleep 30s and retry ({_softblock_state['consecutive']}/{TWSE_SOFTBLOCK_GIVEUP})",
+                    file=sys.stderr,
+                )
+                time.sleep(30)
+                continue
+            print(f"[STOCK_DAY] {symbol} {yyyymm} failed: {exc}", file=sys.stderr)
+            break
+        except Exception as exc:
+            print(f"[STOCK_DAY] {symbol} {yyyymm} failed: {exc}", file=sys.stderr)
+            break
 
     time.sleep(TWSE_DELAY)
 
-    if body.get("stat") != "OK":
+    if not body or body.get("stat") != "OK":
         cache[key] = result
         return result
 
@@ -807,6 +842,46 @@ def _claude_create_with_retry(client: anthropic.Anthropic, user_msg: str):
             time.sleep(delay)
 
 
+def _backfill_reason(c: dict) -> str:
+    """Build a 4-段【標籤】reason for an algorithmically back-filled pick.
+
+    前端 (Home.jsx) 把 reason 當 whitespace-pre-line 純文字渲染，缺 reason 會出現
+    空白卡片。回補股沒有 Claude 撰寫的理由，這裡用候選自身的量化指標湊出與 AI 卡片
+    同結構的說明，並在【近況脈絡】誠實標註此檔為演算法回補、未經 AI 個別評分。
+    """
+    industry = c.get("industry", "未分類")
+    cv = c.get("dividend_cv")
+    cagr = c.get("price_cagr_3y")
+    cv_txt = f"配息變異係數 {cv}" if cv is not None else "配息穩定"
+    cagr_txt = f"近 3 年股價 CAGR {cagr*100:+.1f}%/年" if cagr is not None else "股價長期趨勢資料不足"
+    return (
+        f"【持有邏輯】{industry}族群，通過年年配息 + 配息穩定度（{cv_txt}）與股價趨勢"
+        f"（{cagr_txt}）篩選，基本面符合長期持有條件。\n\n"
+        f"【組合角色】產業分散補位 — 補齊 AI 未選滿的名額，維持 10 檔組合的產業覆蓋廣度。\n\n"
+        f"【風險】此檔為演算法回補，未經 AI 逐檔深入評分，建議自行覆核基本面後再決定。\n\n"
+        f"【近況脈絡】當日 AI 回傳檔數不足 {TARGET_PICKS} 檔，系統依篩選排序自動回補本檔以維持組合完整。"
+    )
+
+
+def _backfill_to_target(picks: list[dict], candidates: list[dict]) -> list[dict]:
+    """Top up `picks` to TARGET_PICKS using unused candidates, preserving order.
+
+    candidates 已依組合偏好（combined score → sector cap → fill）排序，故直接依序
+    取尚未被選中的補入。回補股沿用候選自身的 enrichment 欄位，僅補一個 reason。
+    """
+    picked = {str(p.get("symbol")) for p in picks}
+    for c in candidates:
+        if len(picks) >= TARGET_PICKS:
+            break
+        if str(c.get("symbol")) in picked:
+            continue
+        filled = dict(c)
+        filled["reason"] = _backfill_reason(c)
+        picks.append(filled)
+        picked.add(str(c.get("symbol")))
+    return picks
+
+
 def call_claude(candidates: list[dict]) -> list[dict]:
     user_msg = (
         "候選股票清單（含過去 3 年填息資料、配息穩定度、產業別、股價 CAGR、近 3 月動能）：\n"
@@ -837,15 +912,29 @@ def call_claude(candidates: list[dict]) -> list[dict]:
             picks = result.get("picks", [])
             print(f"[Claude] {len(picks)} picks returned")
             # Claude 不保證遵守「選出 10 檔」— 強制收斂到 TARGET_PICKS。
-            # 多回傳就截掉尾端（picks 依組合偏好排序），少回傳則發出警告但放行
-            # （顯示 9 檔好過當日完全沒有推薦）。
-            if len(picks) != TARGET_PICKS:
+            # 多回傳就截掉尾端（picks 依組合偏好排序）；少回傳則從未被選中的候選依序
+            # 回補到 10 檔。回補保證 DB / API schema / 前端卡片數恆為 10，避免低供給日
+            # （如 TWSE soft-block 導致 fill 池被打薄）讓 <10 檔流入正式環境打掛契約測試。
+            if len(picks) > TARGET_PICKS:
                 print(
-                    f"[Claude] WARNING: expected {TARGET_PICKS} picks, got {len(picks)}"
-                    + ("; truncating to first 10" if len(picks) > TARGET_PICKS else ""),
+                    f"[Claude] WARNING: expected {TARGET_PICKS} picks, got {len(picks)}; truncating to first {TARGET_PICKS}",
                     file=sys.stderr,
                 )
                 picks = picks[:TARGET_PICKS]
+            elif len(picks) < TARGET_PICKS:
+                before = len(picks)
+                picks = _backfill_to_target(picks, candidates)
+                print(
+                    f"[Claude] WARNING: expected {TARGET_PICKS} picks, got {before}; "
+                    f"back-filled {len(picks) - before} from candidate pool → {len(picks)}",
+                    file=sys.stderr,
+                )
+                if len(picks) < TARGET_PICKS:
+                    print(
+                        f"[Claude] WARNING: candidate pool only had {len(candidates)} stocks; "
+                        f"could not reach {TARGET_PICKS} (got {len(picks)})",
+                        file=sys.stderr,
+                    )
             return picks
         except json.JSONDecodeError as exc:
             stop = getattr(msg, "stop_reason", "?")
