@@ -955,31 +955,139 @@ def call_claude(candidates: list[dict]) -> list[dict]:
 # ── Stage 4: Supabase upsert ───────────────────────────────────────────────────
 
 def already_exists(today: date) -> bool:
-    """Return True if today's recommendations are already in Supabase."""
+    """Return True only if today already has a FRESH recommendation.
+
+    Carry-forward（stale）row 回 False — 讓同一天稍晚的班次仍能嘗試抓新並升級
+    該 row，而不是被當成「今天已完成」直接 skip。
+    """
     url   = os.environ["SUPABASE_URL"]
     key   = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     sb    = create_client(url, key)
 
     result = (
         sb.table("ai_recommendations")
-        .select("date")
+        .select("date, reasoning")
         .eq("date", today.isoformat())
         .limit(1)
         .execute()
     )
-    return len(result.data) > 0
+    if not result.data:
+        return False
+    reasoning = str(result.data[0].get("reasoning") or "")
+    return not reasoning.startswith("carry-forward")
 
 
-def save_to_supabase(today: date, picks: list[dict]) -> None:
+def save_to_supabase(today: date, picks: list[dict], stale_from: str | None = None) -> None:
     url   = os.environ["SUPABASE_URL"]
     key   = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
     sb    = create_client(url, key)
 
+    # carry-forward 寫進的 row 在 reasoning 標記來源日期：讓 already_exists 不把它
+    # 當「今天已完成」（後續班次仍可抓新升級），也讓 stale 狀態可被偵測 / 告警。
+    reasoning = f"carry-forward:{stale_from}" if stale_from else ""
     sb.table("ai_recommendations").upsert(
-        {"date": today.isoformat(), "stocks": picks, "reasoning": ""},
+        {"date": today.isoformat(), "stocks": picks, "reasoning": reasoning},
         on_conflict="date",
     ).execute()
-    print(f"[Supabase] upserted {len(picks)} picks for {today}")
+    label = f"carried-forward from {stale_from}" if stale_from else "fresh"
+    print(f"[Supabase] upserted {len(picks)} picks for {today} ({label})")
+
+
+def _latest_stored_picks(today: date) -> tuple[str, list[dict]] | None:
+    """Return (source_date, stocks) of the most recent stored recommendation
+    before today that has a full TARGET_PICKS slate, or None.
+
+    只沿用「真正 10 檔」的歷史 row — 避免把歷史殘留的 <10 檔壞資料（如本次
+    起因的 6 檔 row）複製到今天，反而打掛數量契約。
+    """
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    sb  = create_client(url, key)
+
+    result = (
+        sb.table("ai_recommendations")
+        .select("date, stocks")
+        .lt("date", today.isoformat())
+        .order("date", desc=True)
+        .limit(30)
+        .execute()
+    )
+    for row in result.data or []:
+        stocks = row.get("stocks") or []
+        if len(stocks) == TARGET_PICKS:
+            return row["date"], stocks
+    return None
+
+
+STALE_ALERT_DAYS = 3   # 連續 carry-forward 天數達此值即發 ::warning:: 告警
+
+
+def _consecutive_stale_days(today: date) -> int:
+    """Count consecutive most-recent days (≤ today) whose row is a carry-forward.
+
+    用來偵測 TWSE 持續抓不到、前端長期顯示舊資料的情況（regression 測不出來，
+    因為 carry-forward 也是合法的 10 檔 row）。
+    """
+    url = os.environ["SUPABASE_URL"]
+    key = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
+    sb  = create_client(url, key)
+    result = (
+        sb.table("ai_recommendations")
+        .select("date, reasoning")
+        .lte("date", today.isoformat())
+        .order("date", desc=True)
+        .limit(30)
+        .execute()
+    )
+    n = 0
+    for row in result.data or []:
+        if str(row.get("reasoning") or "").startswith("carry-forward"):
+            n += 1
+        else:
+            break
+    return n
+
+
+def carry_forward_or_die(today: date, reason: str) -> None:
+    """TWSE/Claude 不可用時的後備：沿用最近一筆成功的推薦寫進今天。
+
+    維持「每日恆有一筆 10 檔 row」的契約 — 前端不空頁、QA 數量測試不破 —
+    即使上游（TWSE 擋雲端 IP、Claude 故障）當天完全拿不到資料。找不到任何
+    可沿用的歷史資料才真正失敗 exit(1)。代價：outage 日顯示的是舊推薦。
+    """
+    print(f"[FALLBACK] {reason}; attempting carry-forward of last good picks", file=sys.stderr)
+    try:
+        prev = _latest_stored_picks(today)
+    except Exception as exc:
+        print(f"[FALLBACK] could not read previous picks: {exc}", file=sys.stderr)
+        prev = None
+
+    if not prev or not prev[1]:
+        print("[ERROR] no previous recommendation to carry forward — giving up", file=sys.stderr)
+        sys.exit(1)
+
+    src_date, stocks = prev
+    save_to_supabase(today, stocks, stale_from=src_date)
+    print(
+        f"[FALLBACK] carried forward {len(stocks)} picks from {src_date} → {today} "
+        f"(stale data; upstream unavailable today)",
+        file=sys.stderr,
+    )
+
+    # 連續 stale 太久才告警（不每天吵）：GitHub Actions ::warning:: 註解會顯示在
+    # run summary。regression 驗不出 stale（carry-forward 也是合法 10 檔），靠這個補。
+    try:
+        stale_days = _consecutive_stale_days(today)
+        if stale_days >= STALE_ALERT_DAYS:
+            print(
+                f"::warning::oddlot 已連續 {stale_days} 天 carry-forward"
+                f"（TWSE 抓取持續失敗，前端為舊資料），請查 TWSE 連線"
+            )
+            print(f"[FALLBACK] STALE ALERT: {stale_days} consecutive carry-forward days", file=sys.stderr)
+    except Exception as exc:
+        print(f"[FALLBACK] stale-day count failed: {exc}", file=sys.stderr)
+
+    sys.exit(0)
 
 
 # ── Entry point ────────────────────────────────────────────────────────────────
@@ -999,35 +1107,25 @@ def main() -> None:
         print(f"[WARN] Could not check existing data: {exc}", file=sys.stderr)
         # Proceed anyway — upsert will handle duplicates safely
 
+    # 整條上游鏈（TWSE 抓取 → 配息富集 → Claude 選股）任一環失敗，就走
+    # carry-forward 後備而非直接 exit(1)：沿用最近一筆成功的 10 檔，確保前端
+    # 不空頁、QA 數量測試不破。只有連歷史資料都讀不到時才真正失敗。
     try:
         raw = fetch_candidates()
-    except Exception as exc:
-        print(f"[ERROR] TWSE fetch failed: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    if not raw:
-        print("[ERROR] No candidates after BWIBBU filtering", file=sys.stderr)
-        sys.exit(1)
-
-    try:
+        if not raw:
+            raise RuntimeError("No candidates after BWIBBU filtering")
         candidates = enrich_with_dividend_stats(raw)
-    except Exception as exc:
-        print(f"[ERROR] Dividend enrichment failed: {exc}", file=sys.stderr)
-        sys.exit(1)
-
-    if not candidates:
-        print("[ERROR] No candidates survived dividend filter", file=sys.stderr)
-        sys.exit(1)
-
-    try:
+        if not candidates:
+            raise RuntimeError("No candidates survived dividend filter")
         picks = call_claude(candidates)
     except Exception as exc:
-        print(f"[ERROR] Claude failed: {exc}", file=sys.stderr)
-        sys.exit(1)
+        carry_forward_or_die(today, f"pipeline failed: {exc}")
+        return  # carry_forward_or_die exits; this is unreachable
 
     try:
         save_to_supabase(today, picks)
     except Exception as exc:
+        # Supabase 自己掛了 — carry-forward 也得寫 Supabase，沒救，直接失敗
         print(f"[ERROR] Supabase save failed: {exc}", file=sys.stderr)
         sys.exit(1)
 
