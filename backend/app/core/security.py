@@ -2,9 +2,10 @@ import time
 from threading import Lock
 
 import httpx
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from jose import JWTError, jwt
+from jwt import PyJWK, PyJWTError
 
 from app.core.config import settings
 
@@ -66,7 +67,7 @@ def _decode_token(token: str) -> dict:
     """
     try:
         header = jwt.get_unverified_header(token)
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
@@ -88,19 +89,24 @@ def _decode_token(token: str) -> dict:
         )
 
     try:
+        # JWK dict -> EC public key. `algorithms` is pinned to ES256, so a token
+        # signed with another algorithm (HS256 using the public key as secret,
+        # "none", ...) is rejected before any signature check.
+        signing_key = PyJWK(matching_key).key
         payload = jwt.decode(
             token,
-            matching_key,          # JWK dict — python-jose constructs EC key automatically
+            signing_key,
             algorithms=[ALGORITHM],
             issuer=_supabase_issuer(),
             options={
                 "verify_aud": False,  # Supabase does not set a verifiable aud
                 "verify_exp": True,   # reject expired tokens
                 "verify_iat": True,   # reject tokens with future issued-at
+                "require": ["exp", "iss", "sub"],  # a token without these is invalid
             },
         )
         return payload
-    except JWTError as exc:
+    except PyJWTError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",

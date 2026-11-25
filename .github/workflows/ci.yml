@@ -34,6 +34,22 @@ jobs:
           pip install ruff==0.15.22
           ruff check .
 
+      # JWT 驗證的單元測試（不連網、不需要 Supabase）
+      - name: Backend unit tests
+        working-directory: backend
+        run: |
+          pip install pytest
+          pytest tests -q
+
+      # 已知漏洞掃描。只提醒、不擋 PR（continue-on-error）：新的 CVE 隨時可能出現，
+      # 不該讓無關的 PR 因此變紅。看到警告時再評估升級。
+      - name: Dependency audit
+        continue-on-error: true
+        working-directory: backend
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt
+
   api-and-e2e-tests:
     runs-on: ubuntu-latest
 
