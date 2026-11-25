@@ -3,7 +3,7 @@ services:
     name: oddlot-backend
     runtime: python
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
     rootDir: backend
     envVars:
       - key: ANTHROPIC_API_KEY
@@ -17,8 +17,6 @@ services:
       - key: UPSTASH_REDIS_URL
         sync: false
       - key: UPSTASH_REDIS_TOKEN
-        sync: false
-      - key: INTERNAL_CRON_SECRET
         sync: false
       - key: FINMIND_API_TOKEN
         sync: false

@@ -23,7 +23,6 @@ class Settings(BaseSettings):
     upstash_redis_token: str
 
     # Auth — JWT is verified via Supabase JWKS (public key), no shared secret needed
-    internal_cron_secret: str
 
     # FinMind
     finmind_api_token: str
@@ -33,7 +32,12 @@ class Settings(BaseSettings):
 
     @property
     def origins(self) -> list[str]:
-        return [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        # allow_credentials=True + wildcard origin would let any site make
+        # credentialed cross-origin requests — refuse to start instead.
+        if any("*" in o for o in origins):
+            raise ValueError("ALLOWED_ORIGINS must not contain wildcards")
+        return origins
 
 
 settings = Settings()

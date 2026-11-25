@@ -1,7 +1,8 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, field_validator
+from fastapi import Path
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.limiter import LIMIT_GENERAL, limiter
 from app.core.security import get_current_user
@@ -11,9 +12,12 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/favorites", tags=["favorites"])
 
 
+SYMBOL_PATTERN = r"^[A-Za-z0-9]{1,10}$"  # matches VARCHAR(10) in the DB
+
+
 class FavoriteCreate(BaseModel):
-    symbol: str
-    name: str
+    symbol: str = Field(min_length=1, max_length=10, pattern=SYMBOL_PATTERN)
+    name: str = Field(min_length=1, max_length=50)
 
     @field_validator("symbol")
     @classmethod
@@ -90,7 +94,7 @@ async def add_favorite(
 @limiter.limit(LIMIT_GENERAL)
 async def remove_favorite(
     request: Request,
-    symbol: str,
+    symbol: str = Path(pattern=SYMBOL_PATTERN, max_length=10),
     current_user: dict = Depends(get_current_user),
 ) -> Response:
     """Remove a stock from the authenticated user's favorites."""

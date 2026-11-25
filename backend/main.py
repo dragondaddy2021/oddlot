@@ -3,7 +3,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.api.v1.internal import router as internal_router
 from app.api.v1.router import router as v1_router
 from app.core.config import settings
 from app.core.limiter import limiter
@@ -30,7 +29,7 @@ async def add_security_headers(request: Request, call_next) -> Response:
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
-    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["X-XSS-Protection"] = "0"  # legacy filter disabled (OWASP)
     response.headers["Strict-Transport-Security"] = (
         "max-age=63072000; includeSubDomains; preload"
     )
@@ -39,8 +38,7 @@ async def add_security_headers(request: Request, call_next) -> Response:
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
-app.include_router(v1_router)       # /api/v1/...
-app.include_router(internal_router)  # /internal/...
+app.include_router(v1_router)  # /api/v1/...
 
 
 @app.get("/health", tags=["ops"])

@@ -199,10 +199,9 @@ npm run dev
 
 ### 5. 觸發 AI 選股（開發測試用）
 
-```bash
-curl -X POST http://localhost:8000/internal/run-daily-recommendation \
-  -H "X-Cron-Secret: <INTERNAL_CRON_SECRET>"
-```
+每日選股由 GitHub Actions（`.github/workflows/daily_recommend.yml`）執行，
+本機測試請直接跑 `python backend/scripts/daily_selection.py`
+（需設定 `ANTHROPIC_API_KEY`、`SUPABASE_URL`、`SUPABASE_SERVICE_ROLE_KEY`）。
 
 ---
 
@@ -218,7 +217,6 @@ curl -X POST http://localhost:8000/internal/run-daily-recommendation \
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role 金鑰（後端專用）|
 | `UPSTASH_REDIS_URL`         | Upstash Redis REST URL                |
 | `UPSTASH_REDIS_TOKEN`       | Upstash Redis REST Token              |
-| `INTERNAL_CRON_SECRET`      | 內部排程觸發用密鑰                    |
 | `FINMIND_API_TOKEN`         | FinMind API Token（保留欄位，未啟用） |
 | `ALLOWED_ORIGINS`           | CORS 允許的前端來源（逗號分隔）       |
 | `VITE_API_BASE_URL`         | 前端 API Base URL（生產環境用）       |

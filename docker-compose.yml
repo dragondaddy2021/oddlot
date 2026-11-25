@@ -20,8 +20,11 @@ services:
       dockerfile: Dockerfile
     ports:
       - "5173:5173"
-    env_file:
-      - .env
+    # Only VITE_* vars — don't hand backend secrets to the frontend container
+    environment:
+      - VITE_API_BASE_URL
+      - VITE_SUPABASE_URL
+      - VITE_SUPABASE_ANON_KEY
     volumes:
       - ./frontend:/app
       - /app/node_modules
