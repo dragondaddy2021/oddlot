@@ -30,7 +30,8 @@ jobs:
       - name: Lint with ruff
         working-directory: backend
         run: |
-          pip install ruff
+          # 固定版本：ruff 0.16 起預設規則變多，對既有程式碼報錯；升級時需一併處理
+          pip install ruff==0.15.22
           ruff check .
 
   api-and-e2e-tests:
